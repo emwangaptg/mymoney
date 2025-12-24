@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的錢錢 V88 - 資料安全防護版</title>
+    
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            if (msg.includes('ResizeObserver loop')) return false;
+            var btn = document.getElementById('crash-rescue-btn');
+            if(btn) { 
+                btn.style.display = 'block'; 
+                btn.innerText = "⚠️ 程式發生錯誤 (點此重置): " + msg; 
+            }
+            return false;
+        };
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; background-color: #f8fafc; color: #333; }
+        .card { @apply bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition hover:shadow-md; }
+        .input-label { @apply block text-xs font-bold text-gray-500 mb-1 ml-1; }
+        .input-field { @apply w-full rounded-lg border-gray-300 bg-gray-50 text-sm focus:border-pink-400 focus:ring-pink-300 border p-2.5 transition; }
+        .btn-primary { @apply inline-flex justify-center items-center rounded-lg bg-gradient-to-r from-pink-500 to-rose-500 py-2 px-4 text-sm font-medium text-white shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50 hover:from-pink-600 hover:to-rose-600 focus:outline-none transition transform active:scale-95; }
+        .btn-secondary { @apply inline-flex justify-center items-center rounded-lg border border-gray-200 bg-white py-2 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none transition; }
+        .btn-success { @apply inline-flex justify-center items-center rounded-lg bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-md hover:bg-green-700 focus:outline-none transition; }
+        .btn-warning { @apply inline-flex justify-center items-center rounded-lg bg-amber-500 py-2 px-4 text-sm font-medium text-white shadow-md hover:bg-amber-600 focus:outline-none transition; }
+        .text-up { color: #ef4444; } .text-down { color: #22c55e; }
+        .fa-spin-fast { animation: fa-spin 1s infinite linear; }
+        .div-input { @apply w-full text-center border border-gray-300 rounded-md p-1.5 text-sm bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-200 outline-none transition shadow-sm; }
+        .div-label { @apply text-xs text-gray-500 text-center mb-1.5 font-bold block; }
+        .asset-excluded { @apply opacity-60 bg-gray-50 grayscale; }
+        .badge-excluded { @apply bg-gray-200 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-bold ml-2; }
+        #crash-rescue-btn { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: #ef4444; color: white; padding: 20px; font-size: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; }
+        /* 隱藏檔案上傳 input */
+        #fileInput { display: none; }
+    </style>
+</head>
+<body>
+
+<button id="crash-rescue-btn" onclick="if(confirm('是否重置所有資料以修復？')){localStorage.clear();location.reload();}">程式發生錯誤，點此重置</button>
+<input type="file" id="fileInput" accept=".json" onchange="handleFileUpload(this)">
+
+<div id="app" class="flex h-screen overflow-hidden">
+    <div class="w-64 bg-slate-800 text-white flex flex-col hidden md:flex shrink-0">
+        <div class="p-6 text-2xl font-bold text-pink-400 flex items-center tracking-wide">
+            <i class="fa-solid fa-sack-dollar mr-2"></i> 我的錢錢
+            <span class="text-[10px] ml-auto bg-slate-700 px-2 py-0.5 rounded text-gray-300">V88</span>
+        </div>
+        <nav class="flex-1 px-4 space-y-3 mt-2">
+            <a @click="currentTab = 'dashboard'" :class="tabClass('dashboard')" class="nav-item cursor-pointer"><i class="fa-solid fa-chart-pie w-6 text-center"></i> 資產總覽</a>
+            <a @click="currentTab = 'passive'" :class="tabClass('passive')" class="nav-item cursor-pointer"><i class="fa-solid fa-hand-holding-dollar w-6 text-center"></i> 被動收入</a>
+            <a @click="currentTab = 'portfolio'" :class="tabClass('portfolio')" class="nav-item cursor-pointer"><i class="fa-solid fa-list-ul w-6 text-center"></i> 資產明細</a>
+            <a @click="currentTab = 'history'" :class="tabClass('history')" class="nav-item cursor-pointer"><i class="fa-solid fa-clock-rotate-left w-6 text-center"></i> 年度回顧</a>
+            <a @click="currentTab = 'settings'" :class="tabClass('settings')" class="nav-item cursor-pointer mt-8 border-t border-slate-700 pt-4"><i class="fa-solid fa-gear w-6 text-center"></i> 系統設定</a>
+        </nav>
+    </div>
+
+    <div class="flex-1 flex flex-col overflow-y-auto bg-[#f8fafc]">
+        <header class="bg-white shadow-sm p-4 md:hidden flex justify-between items-center sticky top-0 z-20">
+            <div class="font-bold text-lg text-slate-700">我的錢錢 V88</div>
+            <div class="flex space-x-4 text-lg"><button @click="currentTab = 'portfolio'" class="text-indigo-600"><i class="fa-solid fa-wallet"></i></button></div>
+        </header>
+
+        <main class="p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full pb-20">
+            
+            <div v-if="currentTab === 'dashboard'" class="space-y-6 animate-fade-in">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="card bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-none relative overflow-hidden">
+                        <div class="absolute right-4 top-4 opacity-20"><i class="fa-solid fa-wallet text-6xl"></i></div>
+                        <div class="text-blue-100 text-sm font-medium">淨資產總額 (已扣除未計入項目)</div>
+                        <div class="text-5xl font-bold mt-2 tracking-tight">${{ formatNumber(netWorth) }}</div>
+                        <div class="mt-4 text-sm bg-white/20 px-3 py-1 rounded-full inline-block backdrop-blur-sm">
+                             損益: <span :class="totalProfitLoss>=0?'text-green-300':'text-red-300'">{{ formatNumber(totalProfitLoss) }}</span>
+                        </div>
+                    </div>
+                    <div class="card border-l-4 border-pink-500 relative overflow-hidden">
+                         <div class="absolute right-4 top-4 text-pink-100"><i class="fa-solid fa-money-bill-wheat text-6xl"></i></div>
+                         <div class="text-gray-500 text-sm font-bold">預估年被動收入</div>
+                         <div class="text-4xl font-bold text-slate-800 mt-2">${{ formatNumber(annualPassiveIncome) }}</div>
+                         <div class="mt-4 pt-4 border-t text-sm text-gray-500 flex justify-between items-center">
+                             <span>平均月領</span>
+                             <span class="font-bold text-pink-600 text-xl">${{ formatNumber(annualPassiveIncome / 12) }}</span>
+                         </div>
+                    </div>
+                </div>
+
+                <div class="card mt-6">
+                    <h3 class="font-bold mb-6 text-slate-700 text-lg border-b pb-2"><i class="fa-solid fa-chart-pie mr-2 text-indigo-500"></i>資產分佈 (僅統計計入項目)</h3>
+                    <div class="h-[500px] flex justify-center items-center">
+                        <canvas id="mainPieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'passive'" class="space-y-6 animate-fade-in">
+                <div class="card"><h3 class="font-bold mb-6 text-slate-700">每月現金流預估 (真實入帳月)</h3><div class="h-72"><canvas id="monthlyBarChart"></canvas></div></div>
+                <div class="card overflow-hidden"><table class="w-full text-sm text-left"><thead class="bg-slate-50 text-xs font-bold text-slate-500"><tr><th class="px-4 py-3">名稱</th><th class="px-4 py-3">頻率</th><th class="px-4 py-3">年度總配息</th><th class="px-4 py-3">台幣年收</th><th class="px-4 py-3 text-right">殖利率</th></tr></thead><tbody><tr v-for="item in passiveIncomeList" :key="item.id" class="border-b hover:bg-gray-50"><td class="px-4 py-3 font-bold">{{ item.name }}</td><td class="px-4 py-3 text-xs">{{ item.freq }}</td><td class="px-4 py-3 text-gray-500 font-mono">{{ item.currency }} {{ formatNumber(item.totalDiv, 2) }}</td><td class="px-4 py-3 font-bold text-slate-800">NT$ {{ formatNumber(item.annualIncome) }}</td><td class="px-4 py-3 text-right text-green-600 font-bold">{{ item.yield }}%</td></tr></tbody></table>
+                <div v-if="passiveIncomeList.length === 0" class="text-center p-8 text-gray-400">尚無配息型資產</div>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'portfolio'" class="space-y-6 animate-fade-in">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-slate-800">資產明細管理</h2>
+                    <div class="flex items-center gap-2">
+                        <button @click="updateAllAssets" :disabled="isUpdatingAll" class="btn-secondary shadow-sm text-indigo-600 border-indigo-100 hover:bg-indigo-50">
+                            <i class="fa-solid fa-rotate mr-2" :class="{'fa-spin': isUpdatingAll}"></i>
+                            {{ isUpdatingAll ? '更新中...' : '更新現價' }}
+                        </button>
+                        <button @click="openModal()" class="btn-primary shadow-md">
+                            <i class="fa-solid fa-plus mr-2"></i> 新增資產
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card overflow-hidden p-0"><div class="overflow-x-auto"><table class="min-w-full text-sm text-left text-gray-500">
+                    <thead class="bg-gray-50 text-xs font-bold text-gray-700 uppercase">
+                        <tr>
+                            <th class="px-6 py-4">項目</th>
+                            <th class="px-6 py-4 text-right">單位/股數</th>
+                            <th class="px-6 py-4 text-right">成本(原幣)</th>
+                            <th class="px-6 py-4 text-right">現價/匯率</th>
+                            <th class="px-6 py-4 text-right">總市值(台幣)</th>
+                            <th class="px-6 py-4 text-right">花費成本(台幣)</th>
+                            <th class="px-6 py-4 text-right">損益(台幣)</th>
+                            <th class="px-6 py-4 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white">
+                        <tr v-for="(asset, index) in assets" :key="index" class="hover:bg-slate-50 transition group" :class="{'asset-excluded': asset.includeInTotal === false}">
+                            <td class="px-6 py-4">
+                                <div class="font-bold text-gray-900 flex items-center">
+                                    {{ asset.name }}
+                                    <span v-if="asset.includeInTotal === false" class="badge-excluded"><i class="fa-solid fa-eye-slash mr-1"></i>未計入</span>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-xs px-2 py-0.5 rounded-full" :class="getTypeColor(asset.type)">{{ getChineseType(asset.type) }}</span>
+                                    <span v-if="asset.ticker && !['Cash','Lending'].includes(asset.type)" class="text-xs text-pink-500 font-bold">{{asset.ticker}}</span>
+                                    <span v-if="isUSD(asset)" class="text-[10px] bg-blue-100 text-blue-700 px-1 rounded">USD</span>
+                                    <span v-if="asset.type === 'Crypto' && asset.currency === 'TWD'" class="text-[10px] bg-purple-100 text-purple-700 px-1 rounded">TWD</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-right"><div v-if="['Stock','ETF','Crypto'].includes(asset.type)"><span class="font-bold text-gray-800">{{ formatUnit(asset).main }}</span><div class="text-[10px] text-gray-400">{{ formatUnit(asset).sub }}</div></div><div v-else class="font-bold">{{ formatNumber(asset.shares) }}</div></td>
+                            <td class="px-6 py-4 text-right">{{ formatNumber(asset.avgCost, 2) }}</td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="cursor-pointer border-b border-dotted border-gray-400 font-bold" @click="openModal(asset, index)">{{ formatNumber(asset.currentPrice, 2) }}</div>
+                                <div v-if="!asset.isManual && !['Cash','Lending'].includes(asset.type)" class="text-[10px] text-gray-400 mt-1 cursor-pointer hover:text-indigo-500 flex justify-end items-center" @click.stop="fetchPriceDirect(asset)"><i class="fa-solid fa-rotate mr-1" :class="{'fa-spin-fast': asset.loading}"></i>更新</div>
+                            </td>
+                            <td class="px-6 py-4 text-right font-bold text-slate-800">{{ formatNumber(calculateMarketValue(asset)) }}</td>
+                            <td class="px-6 py-4 text-right text-gray-600">{{ formatNumber(calculateCost(asset)) }}</td>
+                            <td class="px-6 py-4 text-right"><div class="font-bold" :class="getProfitClass(asset)">{{ formatNumber(calculateProfitAmount(asset)) }}</div><div class="text-[10px]" :class="getProfitClass(asset)">{{ calculateProfitPercent(asset) }}%</div></td>
+                            <td class="px-6 py-4 text-center"><button @click="openModal(asset, index)" class="text-indigo-400 hover:text-indigo-600 mr-2"><i class="fa-solid fa-pen"></i></button><button @click="removeAsset(index)" class="text-gray-300 hover:text-red-500"><i class="fa-solid fa-trash-can"></i></button></td>
+                        </tr>
+                    </tbody>
+                </table></div></div>
+            </div>
+
+            <div v-if="currentTab === 'history'" class="space-y-6 animate-fade-in">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">年度資產回顧</h2>
+                        <p class="text-gray-500 text-sm mt-1">紀錄每年的資產里程碑，見證財富複利效應。</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="openHistoryModal" class="btn-secondary text-gray-600 border-gray-300 hover:bg-gray-100">
+                            <i class="fa-solid fa-pen-to-square mr-2"></i> 補登舊資料
+                        </button>
+                        <button @click="recordCurrentHistory" class="btn-primary shadow-indigo-500/30 bg-gradient-to-r from-indigo-500 to-purple-600 border-none">
+                            <i class="fa-solid fa-camera mr-2"></i> 記錄今年 ({{ new Date().getFullYear() }})
+                        </button>
+                    </div>
+                </div>
+                <div class="card h-80"><canvas id="historyChart"></canvas></div>
+                <div class="card overflow-hidden p-0">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold border-b"><tr><th class="px-6 py-4">年份</th><th class="px-6 py-4 text-right">淨資產總額</th><th class="px-6 py-4 text-right">預估年被動收入</th><th class="px-6 py-4 text-right">平均月領</th><th class="px-6 py-4 text-center">操作</th></tr></thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr v-for="(rec, idx) in historyData" :key="rec.year" class="hover:bg-slate-50 transition">
+                                <td class="px-6 py-4 font-bold text-slate-700"><span class="bg-slate-200 px-2 py-1 rounded text-xs mr-2">{{ rec.year }}</span></td>
+                                <td class="px-6 py-4 text-right font-bold text-indigo-600">${{ formatNumber(rec.netWorth) }}</td>
+                                <td class="px-6 py-4 text-right font-bold text-pink-600">${{ formatNumber(rec.passive) }}</td>
+                                <td class="px-6 py-4 text-right text-gray-600">${{ formatNumber(rec.passive / 12) }}</td>
+                                <td class="px-6 py-4 text-center"><button @click="deleteHistory(idx)" class="text-gray-300 hover:text-red-500 transition"><i class="fa-solid fa-trash-can"></i></button></td>
+                            </tr>
+                            <tr v-if="historyData.length === 0"><td colspan="5" class="p-8 text-center text-gray-400">尚未有年度紀錄，請點擊右上方按鈕進行快照。</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'settings'" class="space-y-6 animate-fade-in">
+                <h2 class="text-2xl font-bold text-slate-800">系統設定</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="card border-l-4 border-indigo-500">
+                        <h3 class="font-bold mb-4 text-slate-700">匯率設定</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="input-label">全域美金匯率 (USD)</label>
+                                <div class="flex gap-2">
+                                    <input v-model.number="settings.usdRate" type="number" step="0.01" class="input-field text-lg font-bold text-indigo-600">
+                                    <button @click="fetchGlobalUSDRate" class="btn-secondary whitespace-nowrap"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> 抓取</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card border-l-4 border-green-500">
+                        <h3 class="font-bold mb-4 text-slate-700">資料備份與還原 (JSON)</h3>
+                        <div class="space-y-3">
+                            <p class="text-xs text-gray-500">建議定期備份，以免更換電腦或清除快取導致資料遺失。</p>
+                            <div class="flex gap-3">
+                                <button @click="exportData" class="w-1/2 btn-secondary border-green-200 text-green-700 hover:bg-green-50"><i class="fa-solid fa-download mr-2"></i> 匯出備份</button>
+                                <button @click="triggerImport" class="w-1/2 btn-primary bg-gradient-to-r from-green-500 to-teal-500 shadow-green-500/30"><i class="fa-solid fa-upload mr-2"></i> 匯入還原</button>
+                            </div>
+                             <button @click="exportCSV" class="w-full btn-secondary text-xs text-gray-500 mt-2"><i class="fa-solid fa-file-csv mr-1"></i> 另存為 Excel (CSV)</button>
+                        </div>
+                    </div>
+                    <div class="card border-l-4 border-red-500"><h3 class="font-bold mb-4 text-slate-700">危險區域</h3><div class="space-y-4"><button @click="forceMigrateData" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center justify-center transition"><i class="fa-solid fa-dinosaur mr-2"></i> 撈取舊資料 (V72/V73)</button><button @click="resetData" class="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg flex items-center justify-center transition border border-red-200"><i class="fa-solid fa-trash-can mr-2"></i> 清除所有資料</button></div></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div v-if="showModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white flex justify-between items-center shrink-0"><h3 class="font-bold tracking-wide">{{ isEditing ? '編輯資產' : '新增資產' }}</h3><button @click="showModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button></div>
+            <div class="p-6 overflow-y-auto custom-scrollbar space-y-5">
+                <div><label class="input-label">類別</label><div class="grid grid-cols-4 gap-2"><button type="button" v-for="(label, key) in assetTypesMap" :key="key" @click="switchType(key)" :class="form.type === key ? 'bg-pink-500 text-white ring-2 ring-pink-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="py-2 text-xs rounded-lg font-medium transition">{{ label }}</button></div></div>
+                
+                <div v-if="form.type === 'Lending'" class="bg-orange-50 p-4 rounded-xl border border-orange-100 space-y-3">
+                    <div class="bg-white p-2 rounded text-xs text-orange-600 mb-2"><i class="fa-solid fa-hand-holding-dollar"></i> 記錄借出給他人的款項（應收帳款）。</div>
+                    <div><label class="input-label">借款人 / 項目名稱</label><input v-model="form.name" placeholder="ex: 借給小明" class="input-field"></div>
+                    <div><label class="input-label">借出金額 (TWD)</label><input v-model.number="form.shares" type="number" class="input-field font-bold text-orange-700"></div>
+                    <div><label class="input-label">備註 / 預計歸還日</label><input v-model="form.ticker" placeholder="ex: 2024年底歸還" class="input-field"></div>
+                    <div class="hidden">{{ form.currentPrice = 1 }}{{ form.avgCost = 1 }}{{ form.currency = 'TWD' }}</div>
+                </div>
+
+                <div v-else-if="form.type === 'Bond'" class="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
+                    <div class="bg-white p-2 rounded text-xs text-blue-600 mb-2"><i class="fa-solid fa-circle-info"></i> 直購債券 (ISIN) 請手動更新報價</div>
+                    <div><label class="input-label">債券名稱 / ISIN</label><input v-model="form.name" placeholder="US912810FP85" class="input-field"></div>
+                    <div class="grid grid-cols-2 gap-3"><div><label class="input-label text-blue-800 font-bold">票面金額 (Face Value)</label><input v-model.number="form.shares" type="number" class="input-field font-bold"></div><div><label class="input-label">成本 (%, 或總金額)</label><input v-model.number="form.avgCost" type="number" step="0.01" class="input-field"></div></div>
+                    <div><label class="input-label text-pink-600 font-bold">目前報價 (Price %)</label><input v-model.number="form.currentPrice" type="number" step="0.01" class="input-field border-pink-300 bg-pink-50/50 font-bold"></div>
+                    <div class="border-t border-blue-200 pt-3 mt-2"><label class="input-label">票面利率(%)</label><input v-model.number="form.yield" type="number" step="0.001" class="input-field"></div>
+                    <div class="bg-blue-100 p-2 rounded mt-2"><label class="input-label text-center">入帳月份 (請勾選)</label><div class="grid grid-cols-6 gap-2"><button type="button" v-for="m in 12" :key="m" @click="toggleDividendMonth(m)" :style="form.dividendMonths && form.dividendMonths.includes(m) ? 'background-color: #2563eb; color: white; border-color: #2563eb;' : 'background-color: white; color: #6b7280; border-color: #e5e7eb;'" class="text-xs py-2 rounded-md transition select-none border hover:opacity-90">{{m}}月</button></div></div>
+                    <div class="hidden">{{ form.ticker = 'US-BOND' }}</div>
+                </div>
+
+                <div v-else-if="['Cash', 'Gold'].includes(form.type)" class="bg-green-50 p-4 rounded-xl border border-green-100 space-y-3">
+                    <div class="flex gap-3">
+                        <div class="w-2/3"><label class="input-label">{{form.type==='Gold'?'項目':'銀行'}}</label><input list="bankOptionsModal" v-model="form.name" class="input-field" :placeholder="form.type==='Gold'?'黃金存摺':'請輸入銀行'"><datalist id="bankOptionsModal"><option v-for="b in bankList" :value="b"></datalist></div>
+                        <div class="w-1/3"><label class="input-label">{{form.type==='Gold'?'單位':'幣別'}}</label>
+                            <select v-if="form.type==='Cash'" v-model="form.ticker" class="input-field text-center font-bold" @change="fetchPriceForForm">
+                                <option value="TWD">TWD</option><option value="USD">USD</option><option value="JPY">JPY</option><option value="CNY">CNY</option><option value="EUR">EUR</option><option value="AUD">AUD</option><option value="ZAR">ZAR</option>
+                            </select>
+                            <input v-else v-model="form.ticker" :placeholder="form.type==='Gold'?'克':'TWD'" class="input-field text-center font-bold">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="input-label">{{form.type==='Gold'?'重量':'金額'}}</label><input v-model.number="form.shares" type="number" class="input-field font-bold text-green-700"></div>
+                        <div><label class="input-label">{{form.type==='Gold'?'成本':'匯率'}}</label><input v-model.number="form.avgCost" type="number" class="input-field"></div>
+                    </div>
+                    <div class="flex gap-3 items-end bg-white p-2 rounded-lg border border-green-200">
+                        <div class="w-1/2"><label class="input-label">{{form.type==='Gold'?'金價':'活存利率(%)'}}</label><input v-model.number="form.yield" type="number" step="0.01" class="input-field"></div>
+                        <div class="w-1/2"><label class="input-label">{{form.type==='Cash'?'目前匯率':'目前金價'}}</label><div class="flex gap-2"><input v-model.number="form.currentPrice" type="number" class="input-field" :disabled="form.type==='Cash'&&form.ticker==='TWD'"><button type="button" v-if="form.type==='Cash' && form.ticker!=='TWD'" @click="fetchPriceForForm" class="btn-secondary h-[42px] px-2"><i class="fa-solid fa-rotate" :class="{'fa-spin-fast': form.loading}"></i></button></div></div>
+                    </div>
+                </div>
+
+                <div v-else-if="form.type === 'Crypto'" class="bg-purple-50 p-4 rounded-xl border border-purple-100 space-y-3">
+                     <div class="flex gap-3"><div class="w-1/2"><label class="input-label">代號</label><input v-model="form.ticker" @blur="fetchPriceForForm" placeholder="BTC" class="input-field uppercase font-bold text-purple-700"></div><div class="w-1/2"><label class="input-label">幣別</label><select v-model="form.currency" class="input-field font-bold" @change="fetchPriceForForm"><option value="USD">USD</option><option value="TWD">TWD</option></select></div></div>
+                    <input v-model="form.name" placeholder="名稱" class="input-field">
+                    <div class="grid grid-cols-2 gap-3"><div><label class="input-label">持有數量</label><input v-model.number="form.shares" type="number" step="0.0001" class="input-field font-bold"></div><div><label class="input-label">平均成本</label><input v-model.number="form.avgCost" type="number" class="input-field"></div></div>
+                    <div><label class="input-label text-purple-600">目前市價</label><div class="flex gap-2"><input v-model.number="form.currentPrice" type="number" class="input-field border-purple-300 bg-purple-50/50 font-bold"><button type="button" @click="fetchPriceForForm" class="btn-secondary"><i class="fa-solid fa-rotate mr-1" :class="{'fa-spin-fast': form.loading}"></i></button></div></div>
+                </div>
+
+                <div v-else class="space-y-4">
+                    <div class="flex gap-2 items-end"><div class="w-1/3"><label class="input-label">代號</label><input v-model="form.ticker" @blur="fetchPriceForForm" @keyup.enter="fetchPriceForForm" placeholder="ex: 0050" class="input-field uppercase font-bold text-pink-600"></div><div class="w-2/3"><label class="input-label">名稱</label><input v-model="form.name" class="input-field"></div><button type="button" @click="fetchPriceForForm" class="btn-secondary h-[42px] px-3 text-xs mb-[1px]">抓取</button></div>
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200"><div><label class="input-label">股數</label><input v-model.number="form.shares" type="number" class="input-field font-bold"></div><div><label class="input-label">均價</label><input v-model.number="form.avgCost" type="number" class="input-field"></div></div>
+                    <div><label class="input-label text-pink-600">市價</label><input v-model.number="form.currentPrice" type="number" class="input-field border-pink-300 bg-pink-50/50 font-bold"></div>
+                    <div class="border-t border-dashed border-gray-300 pt-4"><label class="text-sm font-bold text-slate-700 mb-2 block">配息明細設定</label>
+                        <div class="w-full mb-3"><label class="input-label">頻率 (自動偵測)</label><select v-model="form.dividendFreq" class="input-field border-yellow-300" @change="resetDividendDetails"><option value="Annually">年配 (1次)</option><option value="Semi-Annually">半年配 (2次)</option><option value="Quarterly">季配 (4次)</option><option value="Monthly">月配 (12次)</option></select></div>
+                        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                            <div v-if="form.dividendFreq === 'Annually'" class="grid grid-cols-1"><div><label class="div-label">年度</label><input v-model.number="form.dividendDetails[0]" type="number" step="0.01" class="div-input"></div></div>
+                            <div v-else-if="form.dividendFreq === 'Semi-Annually'" class="grid grid-cols-2 gap-4"><div><label class="div-label">上半年</label><input v-model.number="form.dividendDetails[0]" type="number" step="0.01" class="div-input"></div><div><label class="div-label">下半年</label><input v-model.number="form.dividendDetails[1]" type="number" step="0.01" class="div-input"></div></div>
+                            <div v-else-if="form.dividendFreq === 'Quarterly'" class="grid grid-cols-4 gap-3"><div v-for="i in 4" :key="i"><label class="div-label">第{{i}}季</label><input v-model.number="form.dividendDetails[i-1]" type="number" step="0.01" class="div-input"></div></div>
+                            <div v-else-if="form.dividendFreq === 'Monthly'" class="grid grid-cols-6 gap-2"><div v-for="i in 12" :key="i"><label class="div-label">{{i}}月</label><input v-model.number="form.dividendDetails[i-1]" type="number" step="0.01" class="div-input"></div></div>
+                            <div class="mt-3 text-right text-xs text-gray-500 border-t border-yellow-100 pt-2">合計年配息: <span class="font-bold text-gray-800 text-base">${{ calculatedTotalDividend }}</span></div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mt-3"><label class="input-label mb-2 text-center">入帳月份 (勾選)</label><div class="grid grid-cols-6 gap-2"><button type="button" v-for="m in 12" :key="m" @click="toggleDividendMonth(m)" :style="form.dividendMonths && form.dividendMonths.includes(m) ? 'background-color: #ec4899; color: white; border-color: #ec4899;' : 'background-color: white; color: #6b7280; border-color: #e5e7eb;'" class="text-xs py-2 rounded-md transition select-none outline-none border hover:opacity-90">{{m}}月</button></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
+                <div class="flex items-center justify-between mb-4 px-2">
+                    <label class="flex items-center cursor-pointer select-none">
+                        <div class="relative">
+                            <input type="checkbox" v-model="form.includeInTotal" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </div>
+                        <span class="ml-3 text-sm font-medium text-gray-700">計入總資產計算</span>
+                    </label>
+                    <div class="flex space-x-3">
+                        <button type="button" @click="showModal = false" class="btn-secondary">取消</button>
+                        <button type="button" @click="saveAsset" class="btn-primary">儲存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="showHistoryModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex justify-between items-center"><h3 class="font-bold">補登歷史資料</h3><button @click="showHistoryModal = false" class="text-white hover:text-gray-200"><i class="fa-solid fa-times"></i></button></div>
+            <div class="p-6 space-y-4">
+                <div><label class="input-label">年份</label><input v-model.number="historyForm.year" type="number" class="input-field text-center text-lg font-bold" placeholder="2023"></div>
+                <div><label class="input-label">該年度淨資產總額</label><input v-model.number="historyForm.netWorth" type="number" class="input-field font-bold text-indigo-600" placeholder="ex: 1000000"></div>
+                <div><label class="input-label">該年度預估年被動收入</label><input v-model.number="historyForm.passive" type="number" class="input-field font-bold text-pink-600" placeholder="ex: 50000"></div>
+            </div>
+            <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                <button @click="showHistoryModal = false" class="btn-secondary">取消</button>
+                <button @click="saveHistoryRecord" class="btn-primary">儲存紀錄</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, reactive, computed, ref, watch, onMounted, nextTick } = Vue;
+
+    const stockNameMap = {
+        '0050': '元大台灣50', '0056': '元大高股息', '006208': '富邦台50', '00679B': '元大美債20年', '00713': '元大台灣高息低波',
+        '00878': '國泰永續高股息', '00919': '群益台灣精選高息', '00929': '復華台灣科技優息', '00940': '元大台灣價值高息', '00939': '統一台灣高息動能',
+        '1264': '德麥', '2330': '台積電', '2303': '聯電', '2317': '鴻海', '2454': '聯發科', '2881': '富邦金', '2882': '國泰金',
+        '2891': '中信金', '2886': '兆豐金', '2884': '玉山金', '2892': '第一金', '5880': '合庫金', '1101': '台泥', '1102': '亞泥',
+        '1216': '統一', '1301': '台塑', '1303': '南亞', '2002': '中鋼', '2412': '中華電', '2603': '長榮', '2609': '陽明',
+        '2615': '萬海', '2880': '華南金', '2883': '開發金', '2885': '元大金', '2887': '台新金', '2890': '永豐金', '3034': '聯詠',
+        '3037': '欣興', '3231': '緯創', '3711': '日月光投控', '4904': '遠傳', '4938': '和碩', '5871': '中租-KY', '5876': '上海商銀',
+        '6505': '台塑化', '9904': '寶成', 'BTC': '比特幣', 'ETH': '以太幣'
+    };
+    const otcTickers = ['00679B', '00772B', '00751B', '00687B', '00720B', '00725B', '00740B', '00746B']; 
+    const cryptoIdMap = { 
+        'BTC': 'bitcoin', 'ETH': 'ethereum', 'USDT': 'tether', 'BNB': 'binancecoin', 
+        'SOL': 'solana', 'XRP': 'ripple', 'DOGE': 'dogecoin', 'ADA': 'cardano' 
+    };
+
+    const STORAGE_KEY = 'myWealth_Master_DB';
+    const OLD_KEYS = ['myWealthV73_Data', 'myWealthV72_Data'];
+    const bondSchedules = { 'US912810FP85': { freq: 'Semi-Annually', months: [2, 8] }, 'US02209SAR40': { freq: 'Semi-Annually', months: [2, 8] } };
+
+    createApp({
+        setup() {
+            const currentTab = ref('dashboard');
+            const showModal = ref(false);
+            const showHistoryModal = ref(false);
+            const isEditing = ref(false);
+            const editingIndex = ref(-1);
+            const settings = reactive({ salary: 60000, usdRate: 32.5 });
+            const assetTypesMap = { 'Stock': '股票', 'ETF': 'ETF', 'Bond': '直購債券', 'Crypto': '加密貨幣', 'Cash': '活/定存', 'Gold': '黃金', 'Lending': '外借款' };
+            const bankList = ['國泰世華', '玉山銀行', '中國信託', '富邦銀行','華南銀行', '星展銀行', '郵局'];
+            
+            const form = reactive({ 
+                type: 'Stock', bank: '', ticker: '', name: '', shares: 0, avgCost: 0, currentPrice: 0, yield: 0, 
+                currency: 'TWD', dividendFreq: 'Annually', dividendDetails: [0], dividendMonths: [], loading: false, isManual: false,
+                includeInTotal: true 
+            });
+
+            const historyForm = reactive({ year: new Date().getFullYear()-1, netWorth: 0, passive: 0 });
+            
+            const assets = ref([]);
+            const historyData = ref([]); 
+            let historyChart = null; 
+
+            const isUpdatingAll = ref(false);
+            let mainPieChart = null;
+            let monthlyBarChart = null;
+
+            // File Functions
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        // Basic Validation
+                        if (!importedData.assets || !Array.isArray(importedData.assets)) {
+                            throw new Error("Invalid Data Format");
+                        }
+                        if (confirm(`確定要匯入 ${importedData.assets.length} 筆資產資料？這將會覆蓋目前的資料。`)) {
+                            assets.value = importedData.assets;
+                            if(importedData.history) historyData.value = importedData.history;
+                            if(importedData.usdRate) settings.usdRate = importedData.usdRate;
+                            saveData();
+                            alert('匯入成功！');
+                            location.reload();
+                        }
+                    } catch (err) {
+                        alert('匯入失敗：檔案格式錯誤。');
+                    }
+                };
+                reader.readAsText(file);
+                // Reset input
+                event.target.value = ''; 
+            };
+
+            const triggerImport = () => document.getElementById('fileInput').click();
+
+            const exportData = () => {
+                const dataStr = JSON.stringify({
+                    assets: assets.value,
+                    history: historyData.value,
+                    usdRate: settings.usdRate,
+                    exportDate: new Date().toLocaleDateString()
+                }, null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `myWealth_Backup_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const exportCSV = () => {
+                // Simple CSV Export logic
+                let csvContent = "\uFEFF"; // BOM for Excel
+                csvContent += "Type,Name,Ticker,Shares,AvgCost,CurrentPrice,MarketValue,Cost,Profit\n";
+                
+                assets.value.forEach(a => {
+                    const mv = calculateMarketValue(a);
+                    const cost = calculateCost(a);
+                    const profit = mv - cost;
+                    const row = [
+                        assetTypesMap[a.type] || a.type,
+                        a.name || '',
+                        a.ticker || '',
+                        a.shares,
+                        a.avgCost,
+                        a.currentPrice,
+                        Math.round(mv),
+                        Math.round(cost),
+                        Math.round(profit)
+                    ];
+                    csvContent += row.map(e => `"${e}"`).join(",") + "\n";
+                });
+                
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `myWealth_Export_${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            const fetchGlobalUSDRate = () => {
+                fetch('https://corsproxy.io/?' + encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X?interval=1d'))
+                    .then(r=>r.json())
+                    .then(d=>{
+                         if(d.chart && d.chart.result && d.chart.result[0].meta.regularMarketPrice) {
+                             settings.usdRate = d.chart.result[0].meta.regularMarketPrice;
+                             saveData();
+                             alert('美金匯率已更新: ' + settings.usdRate);
+                         } else { alert('匯率抓取失敗'); }
+                    })
+                    .catch(e => { console.error(e); alert('匯率更新失敗'); });
+            };
+
+            const updateAllAssets = async () => {
+                isUpdatingAll.value = true;
+                const promises = assets.value.map(a => {
+                    if (!a.isManual && !['Bond','Lending'].includes(a.type)) {
+                        return new Promise(resolve => {
+                            fetchPriceDirect(a, false, true);
+                            setTimeout(resolve, 500);
+                        });
+                    }
+                    return Promise.resolve();
+                });
+                await Promise.all(promises);
+                isUpdatingAll.value = false;
+            };
+
+            const recordCurrentHistory = () => {
+                const year = new Date().getFullYear();
+                const existingIdx = historyData.value.findIndex(h => h.year === year);
+                const record = {
+                    year: year,
+                    netWorth: netWorth.value,
+                    passive: annualPassiveIncome.value,
+                    timestamp: new Date().getTime()
+                };
+
+                if (existingIdx > -1) {
+                    if(confirm(`已經有 ${year} 年的紀錄了，要覆蓋嗎？`)) {
+                        historyData.value[existingIdx] = record;
+                    } else return;
+                } else {
+                    historyData.value.push(record);
+                }
+                
+                historyData.value.sort((a, b) => b.year - a.year);
+                saveData();
+                renderHistoryChart();
+            };
+
+            const openHistoryModal = () => {
+                historyForm.year = new Date().getFullYear() - 1;
+                historyForm.netWorth = 0;
+                historyForm.passive = 0;
+                showHistoryModal.value = true;
+            };
+
+            const saveHistoryRecord = () => {
+                if(!historyForm.year || historyForm.year < 1900) { alert('請輸入有效年份'); return; }
+                const existingIdx = historyData.value.findIndex(h => h.year === historyForm.year);
+                const record = {
+                    year: historyForm.year,
+                    netWorth: historyForm.netWorth,
+                    passive: historyForm.passive,
+                    timestamp: new Date().getTime()
+                };
+
+                if (existingIdx > -1) {
+                    if(confirm(`已經有 ${historyForm.year} 年的紀錄了，要覆蓋嗎？`)) {
+                        historyData.value[existingIdx] = record;
+                    } else return;
+                } else {
+                    historyData.value.push(record);
+                }
+                historyData.value.sort((a, b) => b.year - a.year);
+                saveData();
+                renderHistoryChart();
+                showHistoryModal.value = false;
+            };
+
+            const deleteHistory = (idx) => {
+                if(confirm('確定刪除此年度紀錄？')) {
+                    historyData.value.splice(idx, 1);
+                    saveData();
+                    renderHistoryChart();
+                }
+            };
+
+            const renderHistoryChart = () => {
+                nextTick(() => {
+                    const ctx = document.getElementById('historyChart');
+                    if(!ctx || currentTab.value !== 'history') return;
+                    
+                    if(historyChart) historyChart.destroy();
+                    
+                    const sortedData = [...historyData.value].sort((a, b) => a.year - b.year);
+                    const labels = sortedData.map(d => d.year);
+                    const netWorths = sortedData.map(d => d.netWorth);
+                    const passives = sortedData.map(d => d.passive);
+
+                    historyChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: '淨資產總額', data: netWorths, borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.1)', yAxisID: 'y', fill: true, tension: 0.3 },
+                                { label: '預估年被動收入', data: passives, borderColor: '#ec4899', backgroundColor: 'transparent', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3 }
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                            scales: {
+                                y: { type: 'linear', display: true, position: 'left', title: { display:true, text:'淨資產 (TWD)' }, grid: { color: '#f3f4f6' } },
+                                y1: { type: 'linear', display: true, position: 'right', title: { display:true, text:'被動收入 (TWD)' }, grid: { drawOnChartArea: false } }
+                            }
+                        }
+                    });
+                });
+            };
+
+            watch(() => form.name, (newName) => {
+                if (form.type === 'Bond' && newName) {
+                    const key = newName.trim().toUpperCase();
+                    if (bondSchedules[key]) {
+                        form.dividendFreq = bondSchedules[key].freq;
+                        form.dividendMonths = bondSchedules[key].months;
+                    }
+                }
+            });
+
+            // --- isUSD: Only Bond and Crypto (if USD selected) need exchange rate ---
+            const isUSD = (asset) => {
+                if (asset.type === 'Bond') return true;
+                if (asset.type === 'Crypto') return asset.currency === 'USD';
+                return false;
+            };
+
+            const getExchangeRate = (asset) => {
+                if(isUSD(asset)) return settings.usdRate;
+                return 1;
+            };
+
+            const calculateMarketValue = (a) => {
+                let val = 0;
+                if (a.type === 'Bond') {
+                    if (a.currentPrice > 200) val = a.currentPrice;
+                    else val = a.shares * (a.currentPrice / 100);
+                    val *= settings.usdRate;
+                } else if (a.type === 'Cash' || a.type === 'Lending' || a.type === 'Gold') {
+                    val = a.shares * a.currentPrice;
+                } else {
+                    // Stock, ETF, Crypto
+                    val = a.shares * a.currentPrice;
+                    if (isUSD(a)) val *= settings.usdRate;
+                }
+                return val;
+            };
+
+            const calculateCost = (a) => {
+                let val = 0;
+                if (a.type === 'Bond') {
+                    if (a.avgCost > 200) val = a.avgCost;
+                    else val = a.shares * (a.avgCost / 100);
+                    val *= settings.usdRate;
+                } else if (a.type === 'Cash' || a.type === 'Gold' || a.type === 'Lending') {
+                    val = a.shares * a.avgCost; 
+                } else {
+                    val = a.shares * a.avgCost;
+                    if (isUSD(a)) val *= settings.usdRate;
+                }
+                return val;
+            };
+
+            const calculateAnnualIncome = (a) => {
+                let income = 0;
+                if (a.type === 'Bond') {
+                    income = a.shares * (a.yield / 100);
+                    income *= settings.usdRate;
+                } else if (a.type === 'Cash') {
+                    let valueTWD = a.shares * a.currentPrice;
+                    income = valueTWD * (a.yield / 100);
+                } else if (a.type === 'Crypto' || a.type === 'Gold' || a.type === 'Lending') {
+                    income = 0;
+                } else {
+                    const totalDiv = sumDividend(a.dividendDetails);
+                    if (totalDiv > 0) income = totalDiv * a.shares;
+                    else income = a.shares * a.currentPrice * (a.yield / 100);
+                    if(isUSD(a)) income *= settings.usdRate;
+                }
+                return income;
+            };
+
+            const resetDividendDetails = () => { const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[form.dividendFreq] || 1; const oldData = [...form.dividendDetails]; form.dividendDetails = Array(count).fill(0).map((_, i) => oldData[i] || 0); };
+            const calculatedTotalDividend = computed(() => { if (!form.dividendDetails) return 0; return form.dividendDetails.reduce((a, b) => a + (Number(b) || 0), 0).toFixed(2); });
+            const calculatedYield = computed(() => { if (['Bond','Cash','Lending'].includes(form.type)) return (form.yield || 0) + '%'; const total = parseFloat(calculatedTotalDividend.value); if (total === 0 || !form.currentPrice) return '0%'; return ((total / form.currentPrice) * 100).toFixed(2) + '%'; });
+            const formatNumber = (n, decimals = 0) => { if (isNaN(n)) return '0'; return Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }); };
+            const formatUnit = (a) => { if(['Stock','ETF'].includes(a.type)) { let s = a.shares/1000; return { main: `${parseFloat(s.toFixed(3))} 張`, sub: `(${a.shares})` }; } if(a.type === 'Crypto') return { main: `${formatNumber(a.shares, 4)} 顆`, sub: '' }; return { main: formatNumber(a.shares), sub: a.type==='Cash'||a.type==='Lending'?'元':'單位' }; };
+            const sumDividend = (details) => { if (!details || !Array.isArray(details)) return 0; return details.reduce((a, b) => a + (Number(b) || 0), 0).toFixed(2); };
+            
+            const loadData = () => { 
+                let saved = localStorage.getItem(STORAGE_KEY); 
+                if (!saved) { for (let key of OLD_KEYS) { const old = localStorage.getItem(key); if (old) { saved = old; localStorage.setItem(STORAGE_KEY, saved); break; } } } 
+                if (saved) { 
+                    const parsed = JSON.parse(saved); 
+                    assets.value = parsed.assets || []; 
+                    if(parsed.usdRate) settings.usdRate = parsed.usdRate; 
+                    historyData.value = parsed.history || [];
+                    assets.value.forEach(a => { 
+                        if (a.includeInTotal === undefined) a.includeInTotal = true;
+                        if (!a.dividendDetails) a.dividendDetails = [a.dividendAmount || 0]; 
+                        if(a.type==='Crypto' && !a.currency) a.currency = 'USD'; 
+                        if((a.type==='Cash' || a.type==='Lending') && !a.currency) a.currency = 'TWD'; 
+                    }); 
+                } 
+            };
+            
+            const forceMigrateData = () => { if(confirm('還原舊資料？')) { for(let i=73; i>=30; i--) { const key = `myWealthV${i}_Data`; if(localStorage.getItem(key)) { localStorage.setItem(STORAGE_KEY, localStorage.getItem(key)); location.reload(); return; } } } };
+            
+            const saveData = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ 
+                assets: assets.value, 
+                usdRate: settings.usdRate,
+                history: historyData.value 
+            }));
+            
+            const resetData = () => { if(confirm('清除重置？')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } };
+            
+            const netWorth = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateMarketValue(a), 0));
+            const totalProfitLoss = computed(() => netWorth.value - assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateCost(a), 0));
+            const annualPassiveIncome = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateAnnualIncome(a), 0));
+            const monthlyIncomeData = computed(() => { let data = new Array(12).fill(0); assets.value.filter(a => a.includeInTotal !== false).forEach(a => { const incomeTWD = calculateAnnualIncome(a); if (incomeTWD > 0) { if (a.dividendMonths && a.dividendMonths.length > 0) { const amountPerMonth = incomeTWD / a.dividendMonths.length; a.dividendMonths.forEach(m => { if (m >= 1 && m <= 12) data[m-1] += amountPerMonth; }); } else { const amt = incomeTWD / 12; for(let i=0; i<12; i++) data[i] += amt; } } }); return data; });
+            
+            const passiveIncomeList = computed(() => { return assets.value.filter(a => a.includeInTotal !== false).map(a => { const incomeTWD = calculateAnnualIncome(a); let originalIncome = 0; let totalDiv = 0; if (a.type === 'Bond' || a.type === 'Cash' || a.type === 'Lending') { originalIncome = a.shares * (a.yield / 100); totalDiv = a.yield; } else { totalDiv = parseFloat(sumDividend(a.dividendDetails)); if(totalDiv > 0) originalIncome = totalDiv * a.shares; else originalIncome = a.shares * a.currentPrice * (a.yield / 100); } 
+            let nameDisplay = a.name; if (a.type === 'Cash') nameDisplay = `${a.name || '未命名'} (活存)`;
+            return { id: a.ticker || a.name, name: nameDisplay, freq: getFreqLabel(a.dividendFreq), currency: (isUSD(a)||a.currency==='USD') ? 'USD' : 'TWD', originalIncome: originalIncome, totalDiv: totalDiv, annualIncome: incomeTWD, yield: a.yield }; }).filter(i => i.annualIncome > 0).sort((a,b) => b.annualIncome - a.annualIncome); });
+
+            const calculateProfitAmount = (a) => calculateMarketValue(a) - calculateCost(a);
+            const calculateProfitPercent = (a) => { const cost = calculateCost(a); if(cost===0) return 0; return ((calculateMarketValue(a)-cost)/cost*100).toFixed(2); };
+            const getProfitClass = (a) => { let v = calculateProfitAmount(a); return v>0?'text-up':(v<0?'text-down':'text-gray-400'); };
+            const getBankColor = (b) => { if(!b) return '#94a3b8'; if(b.includes('國泰')) return '#00aa4e'; if(b.includes('玉山')) return '#ef4c4c'; if(b.includes('中信')) return '#008489'; return '#64748b'; };
+            const getTypeColor = (t) => ({'Stock':'bg-red-100 text-red-700','ETF':'bg-purple-100 text-purple-700','Bond':'bg-blue-100 text-blue-700','Cash':'bg-green-100 text-green-700','Gold':'bg-yellow-100 text-yellow-700','Crypto':'bg-indigo-100 text-indigo-700', 'Lending': 'bg-orange-100 text-orange-700'}[t]);
+            const getChineseType = (t) => assetTypesMap[t];
+            const getFreqLabel = (f) => ({'Annually':'年配','Semi-Annually':'半年','Quarterly':'季配','Monthly':'月配'}[f]||f);
+            const tabClass = (t) => currentTab.value === t ? 'flex items-center p-3 rounded-lg bg-slate-700 text-pink-400 border-l-4 border-pink-500 cursor-pointer transition' : 'flex items-center p-3 rounded-lg text-gray-400 hover:bg-slate-700 hover:text-white cursor-pointer transition';
+            const switchType = (t) => { 
+                form.type = t; 
+                if(t==='Cash'){form.ticker='TWD';form.currency='TWD';form.currentPrice=1;form.avgCost=1;}
+                else if(t==='Lending'){form.ticker='';form.currency='TWD';form.currentPrice=1;form.avgCost=1;form.includeInTotal=false;} 
+                else if(t==='Bond'){form.ticker='US-BOND';}
+                else if(t==='Crypto'){form.currency='USD';}
+                else{form.ticker='';}
+            };
+            const toggleDividendMonth = (m) => { if (!Array.isArray(form.dividendMonths)) form.dividendMonths = []; const idx = form.dividendMonths.indexOf(m); if (idx > -1) form.dividendMonths.splice(idx, 1); else form.dividendMonths.push(m); };
+            const openModal = (asset=null, idx=-1) => { 
+                if(asset) { 
+                    isEditing.value=true; editingIndex.value=idx; 
+                    const data = JSON.parse(JSON.stringify(asset)); 
+                    if(data.includeInTotal === undefined) data.includeInTotal = true; 
+                    if(!data.dividendMonths) data.dividendMonths = []; 
+                    if (!data.dividendDetails || data.dividendDetails.length === 0) { const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[data.dividendFreq] || 1; data.dividendDetails = Array(count).fill(0); } 
+                    Object.assign(form, data); 
+                } else { 
+                    isEditing.value=false; editingIndex.value=-1; 
+                    Object.assign(form, {type:'Stock', bank:'', ticker:'', name:'', shares:0, avgCost:0, currentPrice:0, yield:0, currency: 'USD', dividendFreq:'Annually', dividendDetails: [0], dividendMonths:[], loading: false, isManual: false, includeInTotal: true}); 
+                } 
+                showModal.value=true; 
+            };
+            const saveAsset = () => { if(form.type==='Cash'&&form.ticker==='TWD'){form.currentPrice=1;form.avgCost=1;} if(!Array.isArray(form.dividendMonths)) form.dividendMonths = []; const data = JSON.parse(JSON.stringify(form)); if(isEditing.value) assets.value[editingIndex.value]=data; else assets.value.push(data); showModal.value=false; saveData(); };
+            const removeAsset = (i) => { if(confirm('刪除?')){assets.value.splice(i,1); saveData();} };
+            
+            const fetchPriceDirect = (targetAsset, isForm = false, isBackground = false) => {
+                const currentType = isForm ? form.type : targetAsset.type;
+                if(currentType === 'Bond' || currentType === 'Lending' || (isForm && form.isManual) || (!isForm && targetAsset.isManual)) return;
+                
+                // 1. CoinGecko API for Crypto
+                if (currentType === 'Crypto') {
+                    const sym = (isForm ? form.ticker : targetAsset.ticker).toUpperCase();
+                    const curr = (isForm ? form.currency : targetAsset.currency).toLowerCase(); 
+                    const cgId = cryptoIdMap[sym];
+
+                    if (cgId) {
+                        if(isForm) form.loading = true; else targetAsset.loading = true;
+                        const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=${curr}`;
+                        fetch(cgUrl)
+                            .then(r => r.json())
+                            .then(d => {
+                                if (d[cgId] && d[cgId][curr]) {
+                                    const p = d[cgId][curr];
+                                    if (isForm) { form.currentPrice = p; form.loading = false; }
+                                    else { targetAsset.currentPrice = p; targetAsset.loading = false; saveData(); }
+                                } else {
+                                    fetchYahooCrypto();
+                                }
+                            })
+                            .catch(err => { fetchYahooCrypto(); });
+                        return;
+                    }
+                }
+
+                // 2. Yahoo Finance Logic
+                const fetchYahooCrypto = () => {
+                    if(currentType === 'Cash' || currentType === 'Gold') {
+                        let sym = isForm ? form.ticker : targetAsset.ticker;
+                        let url = '';
+                        if(currentType === 'Gold') { url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d'; }
+                        else {
+                             if(sym === 'TWD') { if(isForm) form.currentPrice=1; return; }
+                             url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}TWD=X?interval=1d`;
+                        }
+                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                        if(isForm) form.loading = true; else targetAsset.loading = true;
+                        fetch(proxyUrl).then(r=>r.json()).then(d=>{
+                             let p = d.chart.result[0].meta.regularMarketPrice;
+                             if(currentType === 'Gold') p = p * 31.1 * settings.usdRate / 1000;
+                             if(isForm) { form.currentPrice = p; form.loading=false; }
+                             else { targetAsset.currentPrice = p; saveData(); targetAsset.loading=false; }
+                        }).catch(e=>{ if(isForm)form.loading=false; else targetAsset.loading=false; });
+                        return;
+                    }
+
+                    let symbol = isForm ? form.ticker : targetAsset.ticker;
+                    if(!symbol) return;
+                    if(isForm) form.loading = true; else targetAsset.loading = true;
+                    
+                    symbol = symbol.toUpperCase().trim();
+                    if(isForm) {
+                        if(stockNameMap[symbol]) form.name = stockNameMap[symbol]; else form.name = ''; 
+                    }
+
+                    let yahooSymbol = symbol;
+                    if (currentType === 'Crypto') { 
+                        const curr = (isForm ? form.currency : targetAsset.currency) || 'USD'; 
+                        if (!symbol.includes('-')) yahooSymbol = symbol + '-' + curr; 
+                    } else { 
+                        if(otcTickers.includes(symbol) || symbol.endsWith('B')) { if(!yahooSymbol.includes('.TWO')) yahooSymbol += '.TWO'; } 
+                        else { if(/^[0-9]/.test(symbol) && !symbol.includes('.TW')) yahooSymbol += '.TW'; } 
+                        if(symbol === 'USD') yahooSymbol = 'USDTWD=X'; 
+                    }
+
+                    const performFetch = (targetSymbol) => {
+                        const targetUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + targetSymbol + '?interval=1d&range=2y&events=div';
+                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+                        return fetch(proxyUrl).then(res => res.json()).then(data => {
+                            if (!data.chart || !data.chart.result) throw new Error('No Data');
+                            return data;
+                        });
+                    };
+
+                    const processData = (data) => {
+                        const result = data.chart.result[0];
+                        let price = result.meta.regularMarketPrice || result.meta.chartPreviousClose;
+                        
+                        if (!price && result.indicators && result.indicators.quote && result.indicators.quote[0]) {
+                            const quotes = result.indicators.quote[0].close;
+                            if(quotes && quotes.length > 0) {
+                                for(let i=quotes.length-1; i>=0; i--) { if(quotes[i]) { price = quotes[i]; break; } }
+                            }
+                        }
+
+                        if(isForm) { 
+                            form.currentPrice = price; 
+                            if(!stockNameMap[symbol] && !form.name) form.name = result.meta.shortName || result.meta.longName || symbol;
+                            form.loading = false; 
+                        } 
+                        else { targetAsset.currentPrice = price; targetAsset.loading = false; saveData(); }
+                        
+                        if(currentType !== 'Crypto' && isForm && result.events && result.events.dividends) {
+                            const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
+                            let freq = 'Annually';
+                            if(divs.length >= 2) { const diffDays = (divs[0].date - divs[1].date) / 86400; if(diffDays<45) freq='Monthly'; else if(diffDays<120) freq='Quarterly'; else if(diffDays<200) freq='Semi-Annually'; }
+                            form.dividendFreq = freq;
+                            const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[freq];
+                            const recentDivs = divs.slice(0, count).map(d => d.amount);
+                            let filled = recentDivs.reverse();
+                            while(filled.length < count) filled.unshift(0);
+                            form.dividendDetails = filled;
+                        }
+                    };
+
+                    performFetch(yahooSymbol)
+                        .then(data => processData(data))
+                        .catch(err => {
+                            if (yahooSymbol.endsWith('.TW') && !yahooSymbol.includes('.TWO')) {
+                                 let altSymbol = yahooSymbol.replace(/\.TW$/, '.TWO');
+                                 performFetch(altSymbol).then(data => processData(data)).catch(e => { if(isForm)form.loading=false;else targetAsset.loading=false; });
+                            } else {
+                                if(isForm)form.loading=false;else targetAsset.loading=false;
+                            }
+                        });
+                };
+
+                if (currentType === 'Crypto' && cryptoIdMap[(isForm ? form.ticker : targetAsset.ticker).toUpperCase()]) {
+                    // Handled by CoinGecko block
+                } else {
+                    fetchYahooCrypto();
+                }
+            };
+            const fetchPriceForForm = () => fetchPriceDirect(null, true);
+            
+            const renderCharts = () => { 
+                nextTick(() => { 
+                    const ctx1 = document.getElementById('mainPieChart'); 
+                    if(ctx1) { 
+                        if(mainPieChart) mainPieChart.destroy(); 
+                        const data = {}; 
+                        assets.value.filter(a => a.includeInTotal !== false).forEach(a => { let k = assetTypesMap[a.type]; if(!data[k])data[k]=0; data[k]+=calculateMarketValue(a); }); 
+                        const totalVal = Object.values(data).reduce((a,b)=>a+b,0);
+                        mainPieChart = new Chart(ctx1, { 
+                            type: 'doughnut', 
+                            data: { labels: Object.keys(data), datasets:[{ data: Object.values(data), backgroundColor:['#FCA5A5','#FDBA74','#FDE047','#86EFAC','#93C5FD', '#C7D2FE', '#fdba74']}] }, 
+                            options: { responsive: true, maintainAspectRatio: false, layout: { padding: 20 }, plugins: { legend: { position:'right' } } },
+                            plugins: [{ id: 'customPieLabels', afterDraw(chart) { const { ctx, width, height } = chart; ctx.save(); ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#374151'; const meta = chart.getDatasetMeta(0); meta.data.forEach((arc, i) => { const value = chart.data.datasets[0].data[i]; if(value > 0) { const center = arc.getCenterPoint(); const percentage = ((value/totalVal)*100).toFixed(1) + '%'; if((value/totalVal) > 0.03) { ctx.fillText(chart.data.labels[i], center.x, center.y - 10); let valStr = '$' + Math.floor(value/10000).toLocaleString() + '萬'; if(value < 10000) valStr = '$' + Math.floor(value); ctx.fillText(valStr, center.x, center.y + 2); ctx.fillText(percentage, center.x, center.y + 14); } } }); ctx.restore(); } }] 
+                        }); 
+                    } 
+                    const ctx2 = document.getElementById('monthlyBarChart'); 
+                    if(ctx2) { 
+                        if(monthlyBarChart) monthlyBarChart.destroy(); 
+                        monthlyBarChart = new Chart(ctx2, { type:'bar', data: { labels:Array.from({length:12},(_,i)=>i+1+'月'), datasets:[{label:'現金流', data:monthlyIncomeData.value, backgroundColor:monthlyIncomeData.value.map(v=>v>0?'#F472B6':'#f3f4f6'), borderRadius:4}] }, 
+                        plugins:[{ id: 'barLabel', afterDatasetsDraw(chart) { const { ctx } = chart; chart.data.datasets.forEach((dataset, i) => { const meta = chart.getDatasetMeta(i); meta.data.forEach((element, index) => { const value = dataset.data[index]; if (value > 0) { ctx.save(); ctx.fillStyle = '#6b7280'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(Math.floor(value).toLocaleString(), element.x, element.y - 5); ctx.restore(); } }); }); } }], options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true},x:{grid:{display:false}}}} }); 
+                    } 
+                    
+                    if(currentTab.value === 'history') renderHistoryChart();
+                }); 
+            };
+            
+            onMounted(() => { loadData(); renderCharts(); });
+            watch([currentTab, assets, settings], () => { saveData(); renderCharts(); }, {deep:true});
+
+            return { currentTab, showModal, isEditing, form, settings, assets, assetTypesMap, bankList, netWorth, annualPassiveIncome, totalProfitLoss, monthlyIncomeData, passiveIncomeList, switchType, openModal, saveAsset, removeAsset, toggleDividendMonth, formatNumber, formatUnit, getBankColor, getTypeColor, getChineseType, getFreqLabel, tabClass, getProfitClass, calculateCost, calculateMarketValue, calculateProfitAmount, calculateProfitPercent, fetchPriceForForm, fetchPriceDirect, resetData, calculatedTotalDividend, calculatedYield, resetDividendDetails, sumDividend, forceMigrateData, isUSD, updateAllAssets, isUpdatingAll, fetchGlobalUSDRate, historyData, recordCurrentHistory, deleteHistory, showHistoryModal, historyForm, openHistoryModal, saveHistoryRecord, handleFileUpload, triggerImport, exportData, exportCSV };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
