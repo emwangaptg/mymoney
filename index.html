@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的錢錢 V88 - 資料安全防護版</title>
+    <title>我的錢錢 V90 - 雲端增強版</title>
     
     <script>
+        window.process = { env: { NODE_ENV: 'production' } };
+        // Global Error Handler
         window.onerror = function(msg, url, line, col, error) {
             if (msg.includes('ResizeObserver loop')) return false;
+            console.error('Global Error:', msg, error);
             var btn = document.getElementById('crash-rescue-btn');
             if(btn) { 
                 btn.style.display = 'block'; 
@@ -31,6 +34,7 @@
         .btn-secondary { @apply inline-flex justify-center items-center rounded-lg border border-gray-200 bg-white py-2 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none transition; }
         .btn-success { @apply inline-flex justify-center items-center rounded-lg bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-md hover:bg-green-700 focus:outline-none transition; }
         .btn-warning { @apply inline-flex justify-center items-center rounded-lg bg-amber-500 py-2 px-4 text-sm font-medium text-white shadow-md hover:bg-amber-600 focus:outline-none transition; }
+        .btn-cloud { @apply inline-flex justify-center items-center rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 py-2 px-4 text-sm font-medium text-white shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:from-blue-600 hover:to-cyan-600 focus:outline-none transition transform active:scale-95; }
         .text-up { color: #ef4444; } .text-down { color: #22c55e; }
         .fa-spin-fast { animation: fa-spin 1s infinite linear; }
         .div-input { @apply w-full text-center border border-gray-300 rounded-md p-1.5 text-sm bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-200 outline-none transition shadow-sm; }
@@ -38,38 +42,81 @@
         .asset-excluded { @apply opacity-60 bg-gray-50 grayscale; }
         .badge-excluded { @apply bg-gray-200 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-bold ml-2; }
         #crash-rescue-btn { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: #ef4444; color: white; padding: 20px; font-size: 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; }
-        /* 隱藏檔案上傳 input */
+        .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .status-online { background-color: #22c55e; box-shadow: 0 0 5px #22c55e; }
+        .status-offline { background-color: #ef4444; }
         #fileInput { display: none; }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body>
 
 <button id="crash-rescue-btn" onclick="if(confirm('是否重置所有資料以修復？')){localStorage.clear();location.reload();}">程式發生錯誤，點此重置</button>
-<input type="file" id="fileInput" accept=".json" onchange="handleFileUpload(this)">
 
 <div id="app" class="flex h-screen overflow-hidden">
-    <div class="w-64 bg-slate-800 text-white flex flex-col hidden md:flex shrink-0">
-        <div class="p-6 text-2xl font-bold text-pink-400 flex items-center tracking-wide">
+    <!-- Hidden File Input inside Vue App -->
+    <input type="file" id="fileInput" accept=".json" @change="handleFileUpload" class="hidden">
+
+    <!-- Sidebar -->
+    <div class="w-64 bg-slate-800 text-white flex flex-col hidden md:flex shrink-0 h-full">
+        <div class="p-6 text-2xl font-bold text-pink-400 flex items-center tracking-wide shrink-0">
             <i class="fa-solid fa-sack-dollar mr-2"></i> 我的錢錢
-            <span class="text-[10px] ml-auto bg-slate-700 px-2 py-0.5 rounded text-gray-300">V88</span>
+            <span class="text-[10px] ml-auto bg-slate-700 px-2 py-0.5 rounded text-gray-300">V90</span>
         </div>
-        <nav class="flex-1 px-4 space-y-3 mt-2">
-            <a @click="currentTab = 'dashboard'" :class="tabClass('dashboard')" class="nav-item cursor-pointer"><i class="fa-solid fa-chart-pie w-6 text-center"></i> 資產總覽</a>
-            <a @click="currentTab = 'passive'" :class="tabClass('passive')" class="nav-item cursor-pointer"><i class="fa-solid fa-hand-holding-dollar w-6 text-center"></i> 被動收入</a>
-            <a @click="currentTab = 'portfolio'" :class="tabClass('portfolio')" class="nav-item cursor-pointer"><i class="fa-solid fa-list-ul w-6 text-center"></i> 資產明細</a>
-            <a @click="currentTab = 'history'" :class="tabClass('history')" class="nav-item cursor-pointer"><i class="fa-solid fa-clock-rotate-left w-6 text-center"></i> 年度回顧</a>
-            <a @click="currentTab = 'settings'" :class="tabClass('settings')" class="nav-item cursor-pointer mt-8 border-t border-slate-700 pt-4"><i class="fa-solid fa-gear w-6 text-center"></i> 系統設定</a>
+        
+        <nav class="flex-1 px-4 space-y-3 mt-2 overflow-y-auto custom-scrollbar">
+            <!-- Normal Tabs -->
+            <div role="button" @click="currentTab = 'dashboard'" :class="tabClass('dashboard')">
+                <i class="fa-solid fa-chart-pie w-6 text-center"></i> 資產總覽
+            </div>
+            <div role="button" @click="currentTab = 'passive'" :class="tabClass('passive')">
+                <i class="fa-solid fa-hand-holding-dollar w-6 text-center"></i> 被動收入
+            </div>
+            <div role="button" @click="currentTab = 'portfolio'" :class="tabClass('portfolio')">
+                <i class="fa-solid fa-list-ul w-6 text-center"></i> 資產明細
+            </div>
+            <div role="button" @click="currentTab = 'history'" :class="tabClass('history')">
+                <i class="fa-solid fa-clock-rotate-left w-6 text-center"></i> 年度回顧
+            </div>
+            
+            <!-- FIX: System Settings Button Structure Isolation -->
+            <div class="mt-8 border-t border-slate-700 pt-4">
+                <div role="button" 
+                     @click="currentTab = 'settings'" 
+                     :class="tabClass('settings')">
+                    <i class="fa-solid fa-gear w-6 text-center"></i> 系統設定
+                    <span v-if="user" class="ml-auto w-2 h-2 rounded-full bg-green-400 box-content border-2 border-slate-800"></span>
+                </div>
+            </div>
         </nav>
+        
+        <div v-if="user" class="p-4 text-xs text-slate-400 bg-slate-900/50 shrink-0">
+            <i class="fa-solid fa-cloud text-blue-400 mr-1"></i> 已連線
+            <div class="truncate opacity-50 mt-1">{{ user.uid.substring(0, 8) }}...</div>
+        </div>
     </div>
 
+    <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-y-auto bg-[#f8fafc]">
+        <!-- Mobile Header -->
         <header class="bg-white shadow-sm p-4 md:hidden flex justify-between items-center sticky top-0 z-20">
-            <div class="font-bold text-lg text-slate-700">我的錢錢 V88</div>
-            <div class="flex space-x-4 text-lg"><button @click="currentTab = 'portfolio'" class="text-indigo-600"><i class="fa-solid fa-wallet"></i></button></div>
+            <div class="font-bold text-lg text-slate-700">我的錢錢 V90</div>
+            <div class="flex space-x-4 text-lg">
+                <button @click="currentTab = 'settings'" class="text-gray-500 relative">
+                    <i class="fa-solid fa-gear"></i>
+                    <span v-if="user" class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 border border-white"></span>
+                </button>
+            </div>
         </header>
 
         <main class="p-4 md:p-8 space-y-6 max-w-7xl mx-auto w-full pb-20">
             
+            <!-- Dashboard Tab -->
             <div v-if="currentTab === 'dashboard'" class="space-y-6 animate-fade-in">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="card bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-none relative overflow-hidden">
@@ -99,6 +146,7 @@
                 </div>
             </div>
 
+            <!-- Passive Income Tab -->
             <div v-if="currentTab === 'passive'" class="space-y-6 animate-fade-in">
                 <div class="card"><h3 class="font-bold mb-6 text-slate-700">每月現金流預估 (真實入帳月)</h3><div class="h-72"><canvas id="monthlyBarChart"></canvas></div></div>
                 <div class="card overflow-hidden"><table class="w-full text-sm text-left"><thead class="bg-slate-50 text-xs font-bold text-slate-500"><tr><th class="px-4 py-3">名稱</th><th class="px-4 py-3">頻率</th><th class="px-4 py-3">年度總配息</th><th class="px-4 py-3">台幣年收</th><th class="px-4 py-3 text-right">殖利率</th></tr></thead><tbody><tr v-for="item in passiveIncomeList" :key="item.id" class="border-b hover:bg-gray-50"><td class="px-4 py-3 font-bold">{{ item.name }}</td><td class="px-4 py-3 text-xs">{{ item.freq }}</td><td class="px-4 py-3 text-gray-500 font-mono">{{ item.currency }} {{ formatNumber(item.totalDiv, 2) }}</td><td class="px-4 py-3 font-bold text-slate-800">NT$ {{ formatNumber(item.annualIncome) }}</td><td class="px-4 py-3 text-right text-green-600 font-bold">{{ item.yield }}%</td></tr></tbody></table>
@@ -106,6 +154,7 @@
                 </div>
             </div>
 
+            <!-- Portfolio Tab -->
             <div v-if="currentTab === 'portfolio'" class="space-y-6 animate-fade-in">
                 <div class="flex justify-between items-center">
                     <h2 class="text-2xl font-bold text-slate-800">資產明細管理</h2>
@@ -162,6 +211,7 @@
                 </table></div></div>
             </div>
 
+            <!-- History Tab -->
             <div v-if="currentTab === 'history'" class="space-y-6 animate-fade-in">
                 <div class="flex justify-between items-end">
                     <div>
@@ -195,9 +245,74 @@
                 </div>
             </div>
 
+            <!-- Settings Tab -->
             <div v-if="currentTab === 'settings'" class="space-y-6 animate-fade-in">
                 <h2 class="text-2xl font-bold text-slate-800">系統設定</h2>
+                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Cloud Sync Card (Optimized based on Baking Master) -->
+                    <div class="card border-l-4 border-blue-500 shadow-md">
+                        <h3 class="font-bold mb-4 text-slate-700 flex items-center">
+                            <i class="fa-solid fa-cloud mr-2 text-blue-500"></i> 雲端同步中心
+                        </h3>
+                        <div class="space-y-4">
+                            <!-- Status Indicator -->
+                            <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                <div>
+                                    <p class="text-sm font-bold text-gray-600">連線狀態</p>
+                                    <p class="text-xs text-gray-400 mt-0.5" v-if="user">ID: {{ user.uid.substring(0,12) }}...</p>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="status-dot" :class="user ? 'status-online' : 'status-offline'"></span>
+                                    <span class="text-sm font-mono font-bold" :class="user ? 'text-green-600' : 'text-red-500'">{{ user ? '已連線' : '未連線' }}</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Unconnected State: Custom Config Input -->
+                            <div v-if="!user" class="space-y-3">
+                                <div class="bg-blue-50 p-3 rounded text-xs text-blue-700">
+                                    <i class="fa-solid fa-circle-info mr-1"></i> 請貼上您的 Firebase Config JSON 以啟用同步功能。
+                                </div>
+                                <textarea 
+                                    v-model="firebaseConfigInput" 
+                                    class="w-full p-3 border rounded-lg font-mono text-[10px] bg-gray-50 h-24 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition resize-none" 
+                                    placeholder='{ "apiKey": "AIza...", "authDomain": "...", ... }'>
+                                </textarea>
+                                <button @click="connectCustomCloud" :disabled="isSyncing" class="w-full btn-primary bg-gradient-to-r from-blue-600 to-indigo-600">
+                                    <span v-if="isSyncing"><i class="fa-solid fa-spinner fa-spin mr-2"></i>連線中...</span>
+                                    <span v-else><i class="fa-solid fa-link mr-2"></i> 連接雲端</span>
+                                </button>
+                            </div>
+
+                            <!-- Connected State: Sync Actions -->
+                            <div v-else class="space-y-3">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button @click="saveToCloud" :disabled="isSyncing" class="btn-cloud relative overflow-hidden h-12">
+                                        <div v-if="isSyncing" class="absolute inset-0 bg-white/20 backdrop-blur-[1px] flex items-center justify-center"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                                        <div class="flex flex-col items-center">
+                                            <span class="text-sm font-bold"><i class="fa-solid fa-cloud-upload-alt mr-1"></i> 上傳備份</span>
+                                            <span class="text-[10px] opacity-80">本機 ➔ 雲端</span>
+                                        </div>
+                                    </button>
+                                    <button @click="loadFromCloud" :disabled="isSyncing" class="btn-secondary border-blue-200 text-blue-600 hover:bg-blue-50 relative overflow-hidden h-12">
+                                        <div v-if="isSyncing" class="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                                        <div class="flex flex-col items-center">
+                                            <span class="text-sm font-bold"><i class="fa-solid fa-cloud-download-alt mr-1"></i> 下載還原</span>
+                                            <span class="text-[10px] opacity-80">雲端 ➔ 本機</span>
+                                        </div>
+                                    </button>
+                                </div>
+                                <button @click="disconnectCloud" class="w-full py-2 text-xs text-red-400 hover:text-red-600 border border-transparent hover:border-red-100 rounded transition">
+                                    中斷連線 / 切換帳號
+                                </button>
+                            </div>
+                            
+                            <p v-if="cloudMessage" class="text-xs text-center mt-2 bg-gray-100 p-2 rounded" :class="cloudMessage.includes('已連線') || cloudMessage.includes('成功') ? 'text-green-600' : (cloudMessage.includes('失敗') || cloudMessage.includes('錯誤') ? 'text-red-500 font-bold' : 'text-gray-600')">
+                                {{ cloudMessage }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="card border-l-4 border-indigo-500">
                         <h3 class="font-bold mb-4 text-slate-700">匯率設定</h3>
                         <div class="space-y-4">
@@ -211,12 +326,12 @@
                         </div>
                     </div>
                     <div class="card border-l-4 border-green-500">
-                        <h3 class="font-bold mb-4 text-slate-700">資料備份與還原 (JSON)</h3>
+                        <h3 class="font-bold mb-4 text-slate-700">本機備份 (JSON)</h3>
                         <div class="space-y-3">
-                            <p class="text-xs text-gray-500">建議定期備份，以免更換電腦或清除快取導致資料遺失。</p>
+                            <p class="text-xs text-gray-500">除了雲端同步，也建議定期下載檔案備份。</p>
                             <div class="flex gap-3">
-                                <button @click="exportData" class="w-1/2 btn-secondary border-green-200 text-green-700 hover:bg-green-50"><i class="fa-solid fa-download mr-2"></i> 匯出備份</button>
-                                <button @click="triggerImport" class="w-1/2 btn-primary bg-gradient-to-r from-green-500 to-teal-500 shadow-green-500/30"><i class="fa-solid fa-upload mr-2"></i> 匯入還原</button>
+                                <button @click="exportData" class="w-1/2 btn-secondary border-green-200 text-green-700 hover:bg-green-50"><i class="fa-solid fa-download mr-2"></i> 匯出檔案</button>
+                                <button @click="triggerImport" class="w-1/2 btn-secondary border-teal-200 text-teal-700 hover:bg-teal-50"><i class="fa-solid fa-upload mr-2"></i> 匯入檔案</button>
                             </div>
                              <button @click="exportCSV" class="w-full btn-secondary text-xs text-gray-500 mt-2"><i class="fa-solid fa-file-csv mr-1"></i> 另存為 Excel (CSV)</button>
                         </div>
@@ -227,6 +342,7 @@
         </main>
     </div>
 
+    <!-- Asset Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div class="bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white flex justify-between items-center shrink-0"><h3 class="font-bold tracking-wide">{{ isEditing ? '編輯資產' : '新增資產' }}</h3><button @click="showModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i></button></div>
@@ -237,7 +353,7 @@
                     <div class="bg-white p-2 rounded text-xs text-orange-600 mb-2"><i class="fa-solid fa-hand-holding-dollar"></i> 記錄借出給他人的款項（應收帳款）。</div>
                     <div><label class="input-label">借款人 / 項目名稱</label><input v-model="form.name" placeholder="ex: 借給小明" class="input-field"></div>
                     <div><label class="input-label">借出金額 (TWD)</label><input v-model.number="form.shares" type="number" class="input-field font-bold text-orange-700"></div>
-                    <div><label class="input-label">備註 / 預計歸還日</label><input v-model="form.ticker" placeholder="ex: 2024年底歸還" class="input-field"></div>
+                    <div><label class="input-label">備註 / 預計歸還日</label><input v-model.number="form.ticker" placeholder="ex: 2024年底歸還" class="input-field"></div>
                     <div class="hidden">{{ form.currentPrice = 1 }}{{ form.avgCost = 1 }}{{ form.currency = 'TWD' }}</div>
                 </div>
 
@@ -314,6 +430,7 @@
         </div>
     </div>
 
+    <!-- History Modal -->
     <div v-if="showHistoryModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
             <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex justify-between items-center"><h3 class="font-bold">補登歷史資料</h3><button @click="showHistoryModal = false" class="text-white hover:text-gray-200"><i class="fa-solid fa-times"></i></button></div>
@@ -331,7 +448,11 @@
 
 </div>
 
-<script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
     const { createApp, reactive, computed, ref, watch, onMounted, nextTick } = Vue;
 
     const stockNameMap = {
@@ -352,10 +473,11 @@
 
     const STORAGE_KEY = 'myWealth_Master_DB';
     const OLD_KEYS = ['myWealthV73_Data', 'myWealthV72_Data'];
-    const bondSchedules = { 'US912810FP85': { freq: 'Semi-Annually', months: [2, 8] }, 'US02209SAR40': { freq: 'Semi-Annually', months: [2, 8] } };
+    const CONFIG_KEY = 'myWealth_Firebase_Config';
 
     createApp({
         setup() {
+            // 1. State
             const currentTab = ref('dashboard');
             const showModal = ref(false);
             const showHistoryModal = ref(false);
@@ -372,28 +494,159 @@
             });
 
             const historyForm = reactive({ year: new Date().getFullYear()-1, netWorth: 0, passive: 0 });
-            
             const assets = ref([]);
             const historyData = ref([]); 
             let historyChart = null; 
-
             const isUpdatingAll = ref(false);
             let mainPieChart = null;
             let monthlyBarChart = null;
 
-            // File Functions
-            const handleFileUpload = (event) => {
+            // Cloud State
+            const user = ref(null);
+            const isSyncing = ref(false);
+            const cloudMessage = ref('');
+            const firebaseConfigInput = ref('');
+            let db = null;
+            let auth = null;
+            let app = null;
+            let appId = 'mymoney-8e727';
+
+            // 2. Helpers (Pure Functions)
+            const formatNumber = (n, d = 0) => isNaN(n) ? '0' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+            const formatUnit = (a) => { if(['Stock','ETF'].includes(a.type)) return { main: `${parseFloat((a.shares/1000).toFixed(3))} 張`, sub: `(${a.shares})` }; if(a.type === 'Crypto') return { main: `${formatNumber(a.shares, 4)} 顆`, sub: '' }; return { main: formatNumber(a.shares), sub: '' }; };
+            const sumDividend = (d) => d && Array.isArray(d) ? d.reduce((a, b) => a + (Number(b) || 0), 0) : 0;
+            const getBankColor = (b) => { if(!b) return '#94a3b8'; if(b.includes('國泰')) return '#00aa4e'; if(b.includes('玉山')) return '#ef4c4c'; if(b.includes('中信')) return '#008489'; return '#64748b'; };
+            const getTypeColor = (t) => ({'Stock':'bg-red-100 text-red-700','ETF':'bg-purple-100 text-purple-700','Bond':'bg-blue-100 text-blue-700','Cash':'bg-green-100 text-green-700','Gold':'bg-yellow-100 text-yellow-700','Crypto':'bg-indigo-100 text-indigo-700', 'Lending': 'bg-orange-100 text-orange-700'}[t]);
+            const getChineseType = (t) => assetTypesMap[t];
+            const getFreqLabel = (f) => ({'Annually':'年配','Semi-Annually':'半年','Quarterly':'季配','Monthly':'月配'}[f]||f);
+            const tabClass = (t) => currentTab.value === t ? 'flex items-center p-3 rounded-lg bg-slate-700 text-pink-400 border-l-4 border-pink-500 cursor-pointer transition' : 'flex items-center p-3 rounded-lg text-gray-400 hover:bg-slate-700 hover:text-white cursor-pointer transition';
+            const isUSD = (a) => a.type === 'Bond' || (a.type === 'Crypto' && a.currency === 'USD');
+
+            // 3. Calculation Logic
+            const calculateMarketValue = (a) => { let v = a.shares * a.currentPrice; if(a.type==='Bond') { v = (a.currentPrice > 200 ? a.currentPrice : a.shares*(a.currentPrice/100)); } if(isUSD(a)) v *= settings.usdRate; return v; };
+            const calculateCost = (a) => { let v = a.shares * a.avgCost; if(a.type==='Bond') { v = (a.avgCost > 200 ? a.avgCost : a.shares*(a.avgCost/100)); } if(isUSD(a)) v *= settings.usdRate; return v; };
+            const calculateAnnualIncome = (a) => { let inc = 0; if(a.type==='Bond') inc = a.shares*(a.yield/100); else if(a.type==='Cash') inc = a.shares*a.currentPrice*(a.yield/100); else if(['Stock','ETF'].includes(a.type)) { const td = sumDividend(a.dividendDetails); if(td>0) inc = td*a.shares; else inc = a.shares*a.currentPrice*(a.yield/100); } if(isUSD(a)) inc *= settings.usdRate; return inc; };
+            const calculateProfitAmount = (a) => calculateMarketValue(a) - calculateCost(a);
+            const calculateProfitPercent = (a) => { const c = calculateCost(a); return c===0 ? 0 : ((calculateMarketValue(a)-c)/c*100).toFixed(2); };
+            const getProfitClass = (a) => { let v = calculateProfitAmount(a); return v>0?'text-up':(v<0?'text-down':'text-gray-400'); };
+
+            // 4. Computed Properties
+            const netWorth = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((s, a) => s + calculateMarketValue(a), 0));
+            const totalProfitLoss = computed(() => netWorth.value - assets.value.filter(a => a.includeInTotal !== false).reduce((s, a) => s + calculateCost(a), 0));
+            const annualPassiveIncome = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((s, a) => s + calculateAnnualIncome(a), 0));
+            const calculatedTotalDividend = computed(() => form.dividendDetails ? form.dividendDetails.reduce((a, b) => a + (Number(b) || 0), 0).toFixed(2) : 0);
+            const calculatedYield = computed(() => { if (['Bond','Cash','Lending'].includes(form.type)) return (form.yield || 0) + '%'; const t = parseFloat(calculatedTotalDividend.value); return (!t || !form.currentPrice) ? '0%' : ((t / form.currentPrice) * 100).toFixed(2) + '%'; });
+            
+            const monthlyIncomeData = computed(() => { 
+                 let data = new Array(12).fill(0); 
+                 assets.value.filter(a => a.includeInTotal !== false).forEach(a => { 
+                     const incomeTWD = calculateAnnualIncome(a); 
+                     if (incomeTWD > 0) { 
+                         if (a.dividendMonths && a.dividendMonths.length > 0) { 
+                             const amountPerMonth = incomeTWD / a.dividendMonths.length; 
+                             a.dividendMonths.forEach(m => { if (m >= 1 && m <= 12) data[m-1] += amountPerMonth; }); 
+                         } else { 
+                             const amt = incomeTWD / 12; 
+                             for(let i=0; i<12; i++) data[i] += amt; 
+                         } 
+                     } 
+                 }); 
+                 return data; 
+             });
+
+            const passiveIncomeList = computed(() => assets.value.filter(a => a.includeInTotal !== false).map(a => { 
+                 const inc = calculateAnnualIncome(a); 
+                 return { name: a.name, freq: getFreqLabel(a.dividendFreq), currency: (isUSD(a) || a.currency === 'USD') ? 'USD' : 'TWD', totalDiv: (a.type==='Bond'||a.type==='Cash')?a.yield:sumDividend(a.dividendDetails), annualIncome: inc, yield: a.yield }; 
+             }).filter(i => i.annualIncome > 0).sort((a,b) => b.annualIncome - a.annualIncome));
+
+            // 5. Actions
+            const switchType = (t) => { form.type = t; if(t==='Cash'){form.ticker='TWD';form.currency='TWD';} else if(t==='Bond'){form.ticker='US-BOND';} else if(t==='Crypto'){form.currency='USD';} };
+            const toggleDividendMonth = (m) => { if (!Array.isArray(form.dividendMonths)) form.dividendMonths = []; const idx = form.dividendMonths.indexOf(m); if (idx > -1) form.dividendMonths.splice(idx, 1); else form.dividendMonths.push(m); };
+            const resetDividendDetails = () => { const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[form.dividendFreq] || 1; form.dividendDetails = Array(count).fill(0); };
+            
+            const openModal = (asset=null, idx=-1) => { 
+                if(asset) { isEditing.value=true; editingIndex.value=idx; const d = JSON.parse(JSON.stringify(asset)); if(d.includeInTotal===undefined) d.includeInTotal=true; if(!d.dividendMonths) d.dividendMonths=[]; if(!d.dividendDetails) d.dividendDetails=[0]; Object.assign(form, d); } 
+                else { isEditing.value=false; editingIndex.value=-1; Object.assign(form, {type:'Stock', bank:'', ticker:'', name:'', shares:0, avgCost:0, currentPrice:0, yield:0, currency: 'USD', dividendFreq:'Annually', dividendDetails:[0], dividendMonths:[], loading: false, isManual: false, includeInTotal: true}); } 
+                showModal.value=true; 
+            };
+            const saveAsset = () => { if(!Array.isArray(form.dividendMonths)) form.dividendMonths=[]; const d = JSON.parse(JSON.stringify(form)); if(isEditing.value) assets.value[editingIndex.value]=d; else assets.value.push(d); showModal.value=false; saveData(); };
+            const removeAsset = (i) => { if(confirm('刪除?')){assets.value.splice(i,1); saveData();} };
+
+            const fetchPriceDirect = (targetAsset, isForm = false, isBackground = false) => {
+                 const currentType = isForm ? form.type : targetAsset.type;
+                 if(currentType === 'Bond' || currentType === 'Lending' || (isForm && form.isManual) || (!isForm && targetAsset.isManual)) return;
+
+                 const fetchYahoo = () => {
+                       let sym = isForm ? form.ticker : targetAsset.ticker;
+                       if(!sym) return;
+                       sym = sym.toUpperCase().trim();
+                       let url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}TWD=X?interval=1d`;
+                       if(currentType === 'Gold') url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d';
+                       if(currentType === 'Cash' && sym === 'TWD') { if(isForm)form.currentPrice=1; return; }
+                       
+                       if(otcTickers.includes(sym)) { if(!sym.includes('.TWO')) sym += '.TWO'; url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d`; }
+                       else if(currentType === 'Stock' || currentType === 'ETF') { 
+                           if(/^[0-9]/.test(sym) && !sym.includes('.TW')) sym += '.TW'; 
+                           url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d`;
+                       }
+
+                       const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                       if(isForm) form.loading = true; else targetAsset.loading = true;
+                       
+                       fetch(proxyUrl).then(r=>r.json()).then(d=>{
+                            if(d.chart && d.chart.result) {
+                                let res = d.chart.result[0];
+                                let p = res.meta.regularMarketPrice || res.meta.chartPreviousClose;
+                                if(currentType === 'Gold') p = p * 31.1 * settings.usdRate / 1000;
+                                if(isForm && !form.name) form.name = stockNameMap[form.ticker] || res.meta.shortName || res.meta.longName;
+                                if(isForm) { form.currentPrice = p; form.loading=false; } 
+                                else { targetAsset.currentPrice = p; saveData(); targetAsset.loading=false; }
+                            } else { if(isForm)form.loading=false; else targetAsset.loading=false; }
+                       }).catch(e=>{ if(isForm)form.loading=false; else targetAsset.loading=false; });
+                 };
+                 
+                 if(currentType==='Crypto') {
+                       const sym = (isForm ? form.ticker : targetAsset.ticker).toUpperCase();
+                       const curr = (isForm ? form.currency : targetAsset.currency).toLowerCase();
+                       const cgId = cryptoIdMap[sym];
+                       if (cgId) {
+                           if(isForm) form.loading=true; else targetAsset.loading=true;
+                           fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=${curr}`).then(r=>r.json()).then(d=>{
+                                if(d[cgId]){ if(isForm) { form.currentPrice=d[cgId][curr]; form.loading=false; } else { targetAsset.currentPrice=d[cgId][curr]; targetAsset.loading=false; saveData(); } } else fetchYahoo();
+                           }).catch(()=>fetchYahoo());
+                       } else fetchYahoo();
+                 } else fetchYahoo();
+             };
+             const fetchPriceForFormLocal = () => fetchPriceDirect(null, true);
+             const fetchGlobalUSDRate = () => {
+                fetch('https://corsproxy.io/?' + encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X?interval=1d')).then(r=>r.json()).then(d=>{
+                     if(d.chart && d.chart.result) { settings.usdRate = d.chart.result[0].meta.regularMarketPrice; saveData(); alert('匯率更新: ' + settings.usdRate); }
+                }).catch(e => alert('匯率更新失敗'));
+            };
+            const updateAllAssets = async () => {
+                isUpdatingAll.value = true;
+                const promises = assets.value.map(a => { if (!a.isManual && !['Bond','Lending'].includes(a.type)) return new Promise(r => { fetchPriceDirect(a, false, true); setTimeout(r, 500); }); return Promise.resolve(); });
+                await Promise.all(promises); isUpdatingAll.value = false;
+            };
+
+            const loadData = () => { 
+                let saved = localStorage.getItem(STORAGE_KEY); 
+                if (!saved) { for (let k of OLD_KEYS) { const o = localStorage.getItem(k); if (o) { saved = o; localStorage.setItem(STORAGE_KEY, saved); break; } } } 
+                if (saved) { const p = JSON.parse(saved); assets.value = p.assets || []; if(p.usdRate) settings.usdRate = p.usdRate; historyData.value = p.history || []; } 
+             };
+             const saveData = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ assets: assets.value, usdRate: settings.usdRate, history: historyData.value }));
+             const resetData = () => { if(confirm('Reset?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } };
+             
+             // File Operations
+             const handleFileUploadModule = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
                         const importedData = JSON.parse(e.target.result);
-                        // Basic Validation
-                        if (!importedData.assets || !Array.isArray(importedData.assets)) {
-                            throw new Error("Invalid Data Format");
-                        }
-                        if (confirm(`確定要匯入 ${importedData.assets.length} 筆資產資料？這將會覆蓋目前的資料。`)) {
+                        if (!importedData.assets || !Array.isArray(importedData.assets)) throw new Error("Invalid Format");
+                        if (confirm(`確定匯入 ${importedData.assets.length} 筆資料？`)) {
                             assets.value = importedData.assets;
                             if(importedData.history) historyData.value = importedData.history;
                             if(importedData.usdRate) settings.usdRate = importedData.usdRate;
@@ -401,494 +654,234 @@
                             alert('匯入成功！');
                             location.reload();
                         }
-                    } catch (err) {
-                        alert('匯入失敗：檔案格式錯誤。');
-                    }
+                    } catch (err) { alert('匯入失敗'); }
                 };
                 reader.readAsText(file);
-                // Reset input
                 event.target.value = ''; 
             };
-
             const triggerImport = () => document.getElementById('fileInput').click();
-
             const exportData = () => {
-                const dataStr = JSON.stringify({
-                    assets: assets.value,
-                    history: historyData.value,
-                    usdRate: settings.usdRate,
-                    exportDate: new Date().toLocaleDateString()
-                }, null, 2);
+                const dataStr = JSON.stringify({ assets: assets.value, history: historyData.value, usdRate: settings.usdRate, exportDate: new Date().toLocaleDateString() }, null, 2);
                 const blob = new Blob([dataStr], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `myWealth_Backup_${new Date().toISOString().slice(0,10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
+                const a = document.createElement('a'); a.href = url; a.download = `myWealth_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
             };
-
-            const exportCSV = () => {
-                // Simple CSV Export logic
-                let csvContent = "\uFEFF"; // BOM for Excel
-                csvContent += "Type,Name,Ticker,Shares,AvgCost,CurrentPrice,MarketValue,Cost,Profit\n";
-                
+             const exportCSV = () => {
+                let csvContent = "\uFEFFType,Name,Ticker,Shares,AvgCost,CurrentPrice,MarketValue,Cost,Profit\n";
                 assets.value.forEach(a => {
-                    const mv = calculateMarketValue(a);
-                    const cost = calculateCost(a);
-                    const profit = mv - cost;
-                    const row = [
-                        assetTypesMap[a.type] || a.type,
-                        a.name || '',
-                        a.ticker || '',
-                        a.shares,
-                        a.avgCost,
-                        a.currentPrice,
-                        Math.round(mv),
-                        Math.round(cost),
-                        Math.round(profit)
-                    ];
+                    const mv = calculateMarketValue(a); const cost = calculateCost(a); const profit = mv - cost;
+                    const row = [assetTypesMap[a.type]||a.type, a.name||'', a.ticker||'', a.shares, a.avgCost, a.currentPrice, Math.round(mv), Math.round(cost), Math.round(profit)];
                     csvContent += row.map(e => `"${e}"`).join(",") + "\n";
                 });
-                
                 const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `myWealth_Export_${new Date().toISOString().slice(0,10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
+                const a = document.createElement('a'); a.href = url; a.download = `myWealth_Export_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+            };
+            
+            // Legacy Migration
+            const forceMigrateData = () => { 
+                if(confirm('還原舊資料？')) { 
+                    for(let i=73; i>=30; i--) { 
+                        const key = `myWealthV${i}_Data`; 
+                        const oldData = localStorage.getItem(key);
+                        if(oldData) { 
+                            localStorage.setItem(STORAGE_KEY, oldData); 
+                            location.reload(); 
+                            return; 
+                        } 
+                    } 
+                    alert('找不到舊版資料');
+                } 
             };
 
-            const fetchGlobalUSDRate = () => {
-                fetch('https://corsproxy.io/?' + encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X?interval=1d'))
-                    .then(r=>r.json())
-                    .then(d=>{
-                         if(d.chart && d.chart.result && d.chart.result[0].meta.regularMarketPrice) {
-                             settings.usdRate = d.chart.result[0].meta.regularMarketPrice;
-                             saveData();
-                             alert('美金匯率已更新: ' + settings.usdRate);
-                         } else { alert('匯率抓取失敗'); }
-                    })
-                    .catch(e => { console.error(e); alert('匯率更新失敗'); });
-            };
-
-            const updateAllAssets = async () => {
-                isUpdatingAll.value = true;
-                const promises = assets.value.map(a => {
-                    if (!a.isManual && !['Bond','Lending'].includes(a.type)) {
-                        return new Promise(resolve => {
-                            fetchPriceDirect(a, false, true);
-                            setTimeout(resolve, 500);
-                        });
-                    }
-                    return Promise.resolve();
-                });
-                await Promise.all(promises);
-                isUpdatingAll.value = false;
-            };
-
+            // History & Cloud
             const recordCurrentHistory = () => {
                 const year = new Date().getFullYear();
                 const existingIdx = historyData.value.findIndex(h => h.year === year);
-                const record = {
-                    year: year,
-                    netWorth: netWorth.value,
-                    passive: annualPassiveIncome.value,
-                    timestamp: new Date().getTime()
-                };
-
-                if (existingIdx > -1) {
-                    if(confirm(`已經有 ${year} 年的紀錄了，要覆蓋嗎？`)) {
-                        historyData.value[existingIdx] = record;
-                    } else return;
-                } else {
-                    historyData.value.push(record);
-                }
-                
-                historyData.value.sort((a, b) => b.year - a.year);
-                saveData();
-                renderHistoryChart();
+                const record = { year: year, netWorth: netWorth.value, passive: annualPassiveIncome.value, timestamp: new Date().getTime() };
+                if (existingIdx > -1) { if(confirm(`覆蓋 ${year} 年紀錄？`)) historyData.value[existingIdx] = record; else return; } else historyData.value.push(record);
+                historyData.value.sort((a, b) => b.year - a.year); saveData(); renderHistoryChart();
             };
-
-            const openHistoryModal = () => {
-                historyForm.year = new Date().getFullYear() - 1;
-                historyForm.netWorth = 0;
-                historyForm.passive = 0;
-                showHistoryModal.value = true;
-            };
-
+            const openHistoryModal = () => { historyForm.year = new Date().getFullYear() - 1; historyForm.netWorth = 0; historyForm.passive = 0; showHistoryModal.value = true; };
             const saveHistoryRecord = () => {
-                if(!historyForm.year || historyForm.year < 1900) { alert('請輸入有效年份'); return; }
-                const existingIdx = historyData.value.findIndex(h => h.year === historyForm.year);
-                const record = {
-                    year: historyForm.year,
-                    netWorth: historyForm.netWorth,
-                    passive: historyForm.passive,
-                    timestamp: new Date().getTime()
-                };
+                 if(!historyForm.year) return;
+                 const idx = historyData.value.findIndex(h => h.year === historyForm.year);
+                 const record = { year: historyForm.year, netWorth: historyForm.netWorth, passive: historyForm.passive, timestamp: new Date().getTime() };
+                 if (idx > -1) { if(confirm('覆蓋？')) historyData.value[idx] = record; else return; } else historyData.value.push(record);
+                 historyData.value.sort((a, b) => b.year - a.year); saveData(); renderHistoryChart(); showHistoryModal.value = false;
+            };
+            const deleteHistory = (i) => { if(confirm('刪除？')) { historyData.value.splice(i, 1); saveData(); renderHistoryChart(); } };
 
-                if (existingIdx > -1) {
-                    if(confirm(`已經有 ${historyForm.year} 年的紀錄了，要覆蓋嗎？`)) {
-                        historyData.value[existingIdx] = record;
-                    } else return;
-                } else {
-                    historyData.value.push(record);
+            const initFirebase = async (manualConfig = null) => {
+                let configToUse = null;
+                const savedConfigStr = localStorage.getItem(CONFIG_KEY);
+                
+                // Pre-fill input for editing if exists
+                if (savedConfigStr) {
+                    firebaseConfigInput.value = savedConfigStr;
                 }
-                historyData.value.sort((a, b) => b.year - a.year);
-                saveData();
-                renderHistoryChart();
-                showHistoryModal.value = false;
+
+                try {
+                    if (manualConfig) {
+                        configToUse = manualConfig;
+                    } else if (savedConfigStr) {
+                        configToUse = JSON.parse(savedConfigStr);
+                    } else {
+                        // Default Fallback
+                        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                            configToUse = JSON.parse(__firebase_config);
+                        } else if (typeof __app_id !== 'undefined') {
+                             configToUse = { 
+                                apiKey: "AIzaSyBMZkTTRKgogrkSLfwrnmmMcUvZk5rSJ9w", 
+                                authDomain: "mymoney-8e727.firebaseapp.com",
+                                projectId: "mymoney-8e727",
+                                appId: "1:697114335542:web:4036b6b490f028efcdbb97"
+                             };
+                        }
+                    }
+
+                    if (!configToUse) return; 
+
+                    appId = configToUse.appId || 'default-app';
+                    
+                    try {
+                        app = initializeApp(configToUse);
+                    } catch(e) {
+                        // Handle re-initialization gracefully
+                        if (e.code === 'app/already-exists') {
+                             // This is tricky in modular. Usually we don't get the instance back easily without getApp.
+                             // But since we reload page on config change, this shouldn't happen often.
+                             // We'll ignore and try to getAuth.
+                        } else {
+                             console.warn("Init Warning", e);
+                        }
+                    }
+
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    // 1. Listen FIRST
+                    onAuthStateChanged(auth, (u) => { 
+                        user.value = u; 
+                        if(u) cloudMessage.value = "已連線至雲端伺服器"; 
+                    });
+
+                    // 2. Auth
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { 
+                        await signInWithCustomToken(auth, __initial_auth_token); 
+                    } else { 
+                        // Wrap in try-catch to allow partial failure if listener picks up user
+                        try {
+                            await signInAnonymously(auth);
+                        } catch(err) {
+                            // Only throw if we didn't get a user from persistence
+                            if (!user.value) throw err; 
+                        }
+                    }
+
+                } catch (e) { 
+                    console.error("Firebase Init Error:", e); 
+                    if (e.message && e.message.includes('configuration-not-found')) {
+                        cloudMessage.value = "錯誤：請至 Firebase Console 開啟「匿名登入 (Anonymous)」功能。";
+                    } else {
+                        cloudMessage.value = "連線失敗: " + e.message; 
+                    }
+                }
             };
 
-            const deleteHistory = (idx) => {
-                if(confirm('確定刪除此年度紀錄？')) {
-                    historyData.value.splice(idx, 1);
-                    saveData();
-                    renderHistoryChart();
+            const connectCustomCloud = () => {
+                try {
+                    const config = JSON.parse(firebaseConfigInput.value);
+                    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+                    alert("設定已儲存，即將重新整理頁面以連線...");
+                    window.location.reload();
+                } catch (e) {
+                    alert("JSON 格式錯誤！請檢查：\n1. 所有屬性名稱必須用雙引號包起來 (例如 \"apiKey\")\n2. 結尾不能有分號 ;");
                 }
+            };
+
+            const disconnectCloud = () => {
+                if(confirm("確定要中斷連線並清除儲存的設定嗎？")) {
+                    localStorage.removeItem(CONFIG_KEY);
+                    window.location.reload();
+                }
+            };
+
+            const saveToCloud = async () => {
+                if (!user.value || !db) return;
+                isSyncing.value = true;
+                cloudMessage.value = '正在上傳...';
+                try {
+                    const dataToSave = { assets: assets.value, history: historyData.value, settings: { usdRate: settings.usdRate }, updatedAt: new Date().toISOString() };
+                    const docRef = doc(db, 'artifacts', appId, 'users', user.value.uid, 'data', 'backup');
+                    await setDoc(docRef, dataToSave);
+                    cloudMessage.value = `✅ 上傳成功 (${new Date().toLocaleTimeString()})`;
+                } catch (e) { console.error(e); cloudMessage.value = '❌ 上傳失敗: ' + e.message; } finally { isSyncing.value = false; }
+            };
+
+            const loadFromCloud = async () => {
+                if (!user.value || !db) return;
+                if(!confirm('確定要下載並覆蓋目前的資料嗎？')) return;
+                isSyncing.value = true;
+                cloudMessage.value = '正在下載...';
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'users', user.value.uid, 'data', 'backup');
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        assets.value = data.assets || [];
+                        historyData.value = data.history || [];
+                        if (data.settings && data.settings.usdRate) settings.usdRate = data.settings.usdRate;
+                        saveData(); renderCharts();
+                        if (currentTab.value === 'history') renderHistoryChart();
+                        cloudMessage.value = `✅ 下載成功 (${new Date().toLocaleTimeString()})`;
+                    } else { cloudMessage.value = '⚠️ 雲端無備份資料'; }
+                } catch (e) { console.error(e); cloudMessage.value = '❌ 下載失敗: ' + e.message; } finally { isSyncing.value = false; }
             };
 
             const renderHistoryChart = () => {
                 nextTick(() => {
-                    const ctx = document.getElementById('historyChart');
-                    if(!ctx || currentTab.value !== 'history') return;
-                    
+                    const ctx = document.getElementById('historyChart'); if(!ctx || currentTab.value !== 'history') return;
                     if(historyChart) historyChart.destroy();
-                    
                     const sortedData = [...historyData.value].sort((a, b) => a.year - b.year);
-                    const labels = sortedData.map(d => d.year);
-                    const netWorths = sortedData.map(d => d.netWorth);
-                    const passives = sortedData.map(d => d.passive);
-
-                    historyChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                { label: '淨資產總額', data: netWorths, borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.1)', yAxisID: 'y', fill: true, tension: 0.3 },
-                                { label: '預估年被動收入', data: passives, borderColor: '#ec4899', backgroundColor: 'transparent', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3 }
-                            ]
-                        },
-                        options: {
-                            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                            scales: {
-                                y: { type: 'linear', display: true, position: 'left', title: { display:true, text:'淨資產 (TWD)' }, grid: { color: '#f3f4f6' } },
-                                y1: { type: 'linear', display: true, position: 'right', title: { display:true, text:'被動收入 (TWD)' }, grid: { drawOnChartArea: false } }
-                            }
-                        }
-                    });
+                    historyChart = new Chart(ctx, { type: 'line', data: { labels: sortedData.map(d => d.year), datasets: [{ label: '淨資產', data: sortedData.map(d => d.netWorth), borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.1)', yAxisID: 'y', fill: true }, { label: '被動收入', data: sortedData.map(d => d.passive), borderColor: '#ec4899', borderDash: [5, 5], yAxisID: 'y1' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } } });
                 });
             };
-
-            watch(() => form.name, (newName) => {
-                if (form.type === 'Bond' && newName) {
-                    const key = newName.trim().toUpperCase();
-                    if (bondSchedules[key]) {
-                        form.dividendFreq = bondSchedules[key].freq;
-                        form.dividendMonths = bondSchedules[key].months;
+            
+            const renderCharts = () => {
+                nextTick(() => {
+                    const ctx1 = document.getElementById('mainPieChart');
+                    if(ctx1) {
+                        if(mainPieChart) mainPieChart.destroy();
+                        const d = {}; assets.value.filter(a => a.includeInTotal !== false).forEach(a => { let k = assetTypesMap[a.type]; if(!d[k])d[k]=0; d[k]+=calculateMarketValue(a); });
+                        mainPieChart = new Chart(ctx1, { type: 'doughnut', data: { labels: Object.keys(d), datasets:[{ data: Object.values(d), backgroundColor:['#FCA5A5','#FDBA74','#FDE047','#86EFAC','#93C5FD', '#C7D2FE', '#fdba74']}] }, options: { responsive: true, maintainAspectRatio: false } });
                     }
-                }
-            });
-
-            // --- isUSD: Only Bond and Crypto (if USD selected) need exchange rate ---
-            const isUSD = (asset) => {
-                if (asset.type === 'Bond') return true;
-                if (asset.type === 'Crypto') return asset.currency === 'USD';
-                return false;
-            };
-
-            const getExchangeRate = (asset) => {
-                if(isUSD(asset)) return settings.usdRate;
-                return 1;
-            };
-
-            const calculateMarketValue = (a) => {
-                let val = 0;
-                if (a.type === 'Bond') {
-                    if (a.currentPrice > 200) val = a.currentPrice;
-                    else val = a.shares * (a.currentPrice / 100);
-                    val *= settings.usdRate;
-                } else if (a.type === 'Cash' || a.type === 'Lending' || a.type === 'Gold') {
-                    val = a.shares * a.currentPrice;
-                } else {
-                    // Stock, ETF, Crypto
-                    val = a.shares * a.currentPrice;
-                    if (isUSD(a)) val *= settings.usdRate;
-                }
-                return val;
-            };
-
-            const calculateCost = (a) => {
-                let val = 0;
-                if (a.type === 'Bond') {
-                    if (a.avgCost > 200) val = a.avgCost;
-                    else val = a.shares * (a.avgCost / 100);
-                    val *= settings.usdRate;
-                } else if (a.type === 'Cash' || a.type === 'Gold' || a.type === 'Lending') {
-                    val = a.shares * a.avgCost; 
-                } else {
-                    val = a.shares * a.avgCost;
-                    if (isUSD(a)) val *= settings.usdRate;
-                }
-                return val;
-            };
-
-            const calculateAnnualIncome = (a) => {
-                let income = 0;
-                if (a.type === 'Bond') {
-                    income = a.shares * (a.yield / 100);
-                    income *= settings.usdRate;
-                } else if (a.type === 'Cash') {
-                    let valueTWD = a.shares * a.currentPrice;
-                    income = valueTWD * (a.yield / 100);
-                } else if (a.type === 'Crypto' || a.type === 'Gold' || a.type === 'Lending') {
-                    income = 0;
-                } else {
-                    const totalDiv = sumDividend(a.dividendDetails);
-                    if (totalDiv > 0) income = totalDiv * a.shares;
-                    else income = a.shares * a.currentPrice * (a.yield / 100);
-                    if(isUSD(a)) income *= settings.usdRate;
-                }
-                return income;
-            };
-
-            const resetDividendDetails = () => { const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[form.dividendFreq] || 1; const oldData = [...form.dividendDetails]; form.dividendDetails = Array(count).fill(0).map((_, i) => oldData[i] || 0); };
-            const calculatedTotalDividend = computed(() => { if (!form.dividendDetails) return 0; return form.dividendDetails.reduce((a, b) => a + (Number(b) || 0), 0).toFixed(2); });
-            const calculatedYield = computed(() => { if (['Bond','Cash','Lending'].includes(form.type)) return (form.yield || 0) + '%'; const total = parseFloat(calculatedTotalDividend.value); if (total === 0 || !form.currentPrice) return '0%'; return ((total / form.currentPrice) * 100).toFixed(2) + '%'; });
-            const formatNumber = (n, decimals = 0) => { if (isNaN(n)) return '0'; return Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }); };
-            const formatUnit = (a) => { if(['Stock','ETF'].includes(a.type)) { let s = a.shares/1000; return { main: `${parseFloat(s.toFixed(3))} 張`, sub: `(${a.shares})` }; } if(a.type === 'Crypto') return { main: `${formatNumber(a.shares, 4)} 顆`, sub: '' }; return { main: formatNumber(a.shares), sub: a.type==='Cash'||a.type==='Lending'?'元':'單位' }; };
-            const sumDividend = (details) => { if (!details || !Array.isArray(details)) return 0; return details.reduce((a, b) => a + (Number(b) || 0), 0).toFixed(2); };
-            
-            const loadData = () => { 
-                let saved = localStorage.getItem(STORAGE_KEY); 
-                if (!saved) { for (let key of OLD_KEYS) { const old = localStorage.getItem(key); if (old) { saved = old; localStorage.setItem(STORAGE_KEY, saved); break; } } } 
-                if (saved) { 
-                    const parsed = JSON.parse(saved); 
-                    assets.value = parsed.assets || []; 
-                    if(parsed.usdRate) settings.usdRate = parsed.usdRate; 
-                    historyData.value = parsed.history || [];
-                    assets.value.forEach(a => { 
-                        if (a.includeInTotal === undefined) a.includeInTotal = true;
-                        if (!a.dividendDetails) a.dividendDetails = [a.dividendAmount || 0]; 
-                        if(a.type==='Crypto' && !a.currency) a.currency = 'USD'; 
-                        if((a.type==='Cash' || a.type==='Lending') && !a.currency) a.currency = 'TWD'; 
-                    }); 
-                } 
-            };
-            
-            const forceMigrateData = () => { if(confirm('還原舊資料？')) { for(let i=73; i>=30; i--) { const key = `myWealthV${i}_Data`; if(localStorage.getItem(key)) { localStorage.setItem(STORAGE_KEY, localStorage.getItem(key)); location.reload(); return; } } } };
-            
-            const saveData = () => localStorage.setItem(STORAGE_KEY, JSON.stringify({ 
-                assets: assets.value, 
-                usdRate: settings.usdRate,
-                history: historyData.value 
-            }));
-            
-            const resetData = () => { if(confirm('清除重置？')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } };
-            
-            const netWorth = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateMarketValue(a), 0));
-            const totalProfitLoss = computed(() => netWorth.value - assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateCost(a), 0));
-            const annualPassiveIncome = computed(() => assets.value.filter(a => a.includeInTotal !== false).reduce((sum, a) => sum + calculateAnnualIncome(a), 0));
-            const monthlyIncomeData = computed(() => { let data = new Array(12).fill(0); assets.value.filter(a => a.includeInTotal !== false).forEach(a => { const incomeTWD = calculateAnnualIncome(a); if (incomeTWD > 0) { if (a.dividendMonths && a.dividendMonths.length > 0) { const amountPerMonth = incomeTWD / a.dividendMonths.length; a.dividendMonths.forEach(m => { if (m >= 1 && m <= 12) data[m-1] += amountPerMonth; }); } else { const amt = incomeTWD / 12; for(let i=0; i<12; i++) data[i] += amt; } } }); return data; });
-            
-            const passiveIncomeList = computed(() => { return assets.value.filter(a => a.includeInTotal !== false).map(a => { const incomeTWD = calculateAnnualIncome(a); let originalIncome = 0; let totalDiv = 0; if (a.type === 'Bond' || a.type === 'Cash' || a.type === 'Lending') { originalIncome = a.shares * (a.yield / 100); totalDiv = a.yield; } else { totalDiv = parseFloat(sumDividend(a.dividendDetails)); if(totalDiv > 0) originalIncome = totalDiv * a.shares; else originalIncome = a.shares * a.currentPrice * (a.yield / 100); } 
-            let nameDisplay = a.name; if (a.type === 'Cash') nameDisplay = `${a.name || '未命名'} (活存)`;
-            return { id: a.ticker || a.name, name: nameDisplay, freq: getFreqLabel(a.dividendFreq), currency: (isUSD(a)||a.currency==='USD') ? 'USD' : 'TWD', originalIncome: originalIncome, totalDiv: totalDiv, annualIncome: incomeTWD, yield: a.yield }; }).filter(i => i.annualIncome > 0).sort((a,b) => b.annualIncome - a.annualIncome); });
-
-            const calculateProfitAmount = (a) => calculateMarketValue(a) - calculateCost(a);
-            const calculateProfitPercent = (a) => { const cost = calculateCost(a); if(cost===0) return 0; return ((calculateMarketValue(a)-cost)/cost*100).toFixed(2); };
-            const getProfitClass = (a) => { let v = calculateProfitAmount(a); return v>0?'text-up':(v<0?'text-down':'text-gray-400'); };
-            const getBankColor = (b) => { if(!b) return '#94a3b8'; if(b.includes('國泰')) return '#00aa4e'; if(b.includes('玉山')) return '#ef4c4c'; if(b.includes('中信')) return '#008489'; return '#64748b'; };
-            const getTypeColor = (t) => ({'Stock':'bg-red-100 text-red-700','ETF':'bg-purple-100 text-purple-700','Bond':'bg-blue-100 text-blue-700','Cash':'bg-green-100 text-green-700','Gold':'bg-yellow-100 text-yellow-700','Crypto':'bg-indigo-100 text-indigo-700', 'Lending': 'bg-orange-100 text-orange-700'}[t]);
-            const getChineseType = (t) => assetTypesMap[t];
-            const getFreqLabel = (f) => ({'Annually':'年配','Semi-Annually':'半年','Quarterly':'季配','Monthly':'月配'}[f]||f);
-            const tabClass = (t) => currentTab.value === t ? 'flex items-center p-3 rounded-lg bg-slate-700 text-pink-400 border-l-4 border-pink-500 cursor-pointer transition' : 'flex items-center p-3 rounded-lg text-gray-400 hover:bg-slate-700 hover:text-white cursor-pointer transition';
-            const switchType = (t) => { 
-                form.type = t; 
-                if(t==='Cash'){form.ticker='TWD';form.currency='TWD';form.currentPrice=1;form.avgCost=1;}
-                else if(t==='Lending'){form.ticker='';form.currency='TWD';form.currentPrice=1;form.avgCost=1;form.includeInTotal=false;} 
-                else if(t==='Bond'){form.ticker='US-BOND';}
-                else if(t==='Crypto'){form.currency='USD';}
-                else{form.ticker='';}
-            };
-            const toggleDividendMonth = (m) => { if (!Array.isArray(form.dividendMonths)) form.dividendMonths = []; const idx = form.dividendMonths.indexOf(m); if (idx > -1) form.dividendMonths.splice(idx, 1); else form.dividendMonths.push(m); };
-            const openModal = (asset=null, idx=-1) => { 
-                if(asset) { 
-                    isEditing.value=true; editingIndex.value=idx; 
-                    const data = JSON.parse(JSON.stringify(asset)); 
-                    if(data.includeInTotal === undefined) data.includeInTotal = true; 
-                    if(!data.dividendMonths) data.dividendMonths = []; 
-                    if (!data.dividendDetails || data.dividendDetails.length === 0) { const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[data.dividendFreq] || 1; data.dividendDetails = Array(count).fill(0); } 
-                    Object.assign(form, data); 
-                } else { 
-                    isEditing.value=false; editingIndex.value=-1; 
-                    Object.assign(form, {type:'Stock', bank:'', ticker:'', name:'', shares:0, avgCost:0, currentPrice:0, yield:0, currency: 'USD', dividendFreq:'Annually', dividendDetails: [0], dividendMonths:[], loading: false, isManual: false, includeInTotal: true}); 
-                } 
-                showModal.value=true; 
-            };
-            const saveAsset = () => { if(form.type==='Cash'&&form.ticker==='TWD'){form.currentPrice=1;form.avgCost=1;} if(!Array.isArray(form.dividendMonths)) form.dividendMonths = []; const data = JSON.parse(JSON.stringify(form)); if(isEditing.value) assets.value[editingIndex.value]=data; else assets.value.push(data); showModal.value=false; saveData(); };
-            const removeAsset = (i) => { if(confirm('刪除?')){assets.value.splice(i,1); saveData();} };
-            
-            const fetchPriceDirect = (targetAsset, isForm = false, isBackground = false) => {
-                const currentType = isForm ? form.type : targetAsset.type;
-                if(currentType === 'Bond' || currentType === 'Lending' || (isForm && form.isManual) || (!isForm && targetAsset.isManual)) return;
-                
-                // 1. CoinGecko API for Crypto
-                if (currentType === 'Crypto') {
-                    const sym = (isForm ? form.ticker : targetAsset.ticker).toUpperCase();
-                    const curr = (isForm ? form.currency : targetAsset.currency).toLowerCase(); 
-                    const cgId = cryptoIdMap[sym];
-
-                    if (cgId) {
-                        if(isForm) form.loading = true; else targetAsset.loading = true;
-                        const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=${curr}`;
-                        fetch(cgUrl)
-                            .then(r => r.json())
-                            .then(d => {
-                                if (d[cgId] && d[cgId][curr]) {
-                                    const p = d[cgId][curr];
-                                    if (isForm) { form.currentPrice = p; form.loading = false; }
-                                    else { targetAsset.currentPrice = p; targetAsset.loading = false; saveData(); }
-                                } else {
-                                    fetchYahooCrypto();
-                                }
-                            })
-                            .catch(err => { fetchYahooCrypto(); });
-                        return;
-                    }
-                }
-
-                // 2. Yahoo Finance Logic
-                const fetchYahooCrypto = () => {
-                    if(currentType === 'Cash' || currentType === 'Gold') {
-                        let sym = isForm ? form.ticker : targetAsset.ticker;
-                        let url = '';
-                        if(currentType === 'Gold') { url = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d'; }
-                        else {
-                             if(sym === 'TWD') { if(isForm) form.currentPrice=1; return; }
-                             url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}TWD=X?interval=1d`;
-                        }
-                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-                        if(isForm) form.loading = true; else targetAsset.loading = true;
-                        fetch(proxyUrl).then(r=>r.json()).then(d=>{
-                             let p = d.chart.result[0].meta.regularMarketPrice;
-                             if(currentType === 'Gold') p = p * 31.1 * settings.usdRate / 1000;
-                             if(isForm) { form.currentPrice = p; form.loading=false; }
-                             else { targetAsset.currentPrice = p; saveData(); targetAsset.loading=false; }
-                        }).catch(e=>{ if(isForm)form.loading=false; else targetAsset.loading=false; });
-                        return;
-                    }
-
-                    let symbol = isForm ? form.ticker : targetAsset.ticker;
-                    if(!symbol) return;
-                    if(isForm) form.loading = true; else targetAsset.loading = true;
-                    
-                    symbol = symbol.toUpperCase().trim();
-                    if(isForm) {
-                        if(stockNameMap[symbol]) form.name = stockNameMap[symbol]; else form.name = ''; 
-                    }
-
-                    let yahooSymbol = symbol;
-                    if (currentType === 'Crypto') { 
-                        const curr = (isForm ? form.currency : targetAsset.currency) || 'USD'; 
-                        if (!symbol.includes('-')) yahooSymbol = symbol + '-' + curr; 
-                    } else { 
-                        if(otcTickers.includes(symbol) || symbol.endsWith('B')) { if(!yahooSymbol.includes('.TWO')) yahooSymbol += '.TWO'; } 
-                        else { if(/^[0-9]/.test(symbol) && !symbol.includes('.TW')) yahooSymbol += '.TW'; } 
-                        if(symbol === 'USD') yahooSymbol = 'USDTWD=X'; 
-                    }
-
-                    const performFetch = (targetSymbol) => {
-                        const targetUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + targetSymbol + '?interval=1d&range=2y&events=div';
-                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
-                        return fetch(proxyUrl).then(res => res.json()).then(data => {
-                            if (!data.chart || !data.chart.result) throw new Error('No Data');
-                            return data;
-                        });
-                    };
-
-                    const processData = (data) => {
-                        const result = data.chart.result[0];
-                        let price = result.meta.regularMarketPrice || result.meta.chartPreviousClose;
-                        
-                        if (!price && result.indicators && result.indicators.quote && result.indicators.quote[0]) {
-                            const quotes = result.indicators.quote[0].close;
-                            if(quotes && quotes.length > 0) {
-                                for(let i=quotes.length-1; i>=0; i--) { if(quotes[i]) { price = quotes[i]; break; } }
-                            }
-                        }
-
-                        if(isForm) { 
-                            form.currentPrice = price; 
-                            if(!stockNameMap[symbol] && !form.name) form.name = result.meta.shortName || result.meta.longName || symbol;
-                            form.loading = false; 
-                        } 
-                        else { targetAsset.currentPrice = price; targetAsset.loading = false; saveData(); }
-                        
-                        if(currentType !== 'Crypto' && isForm && result.events && result.events.dividends) {
-                            const divs = Object.values(result.events.dividends).sort((a, b) => b.date - a.date);
-                            let freq = 'Annually';
-                            if(divs.length >= 2) { const diffDays = (divs[0].date - divs[1].date) / 86400; if(diffDays<45) freq='Monthly'; else if(diffDays<120) freq='Quarterly'; else if(diffDays<200) freq='Semi-Annually'; }
-                            form.dividendFreq = freq;
-                            const count = { 'Annually': 1, 'Semi-Annually': 2, 'Quarterly': 4, 'Monthly': 12 }[freq];
-                            const recentDivs = divs.slice(0, count).map(d => d.amount);
-                            let filled = recentDivs.reverse();
-                            while(filled.length < count) filled.unshift(0);
-                            form.dividendDetails = filled;
-                        }
-                    };
-
-                    performFetch(yahooSymbol)
-                        .then(data => processData(data))
-                        .catch(err => {
-                            if (yahooSymbol.endsWith('.TW') && !yahooSymbol.includes('.TWO')) {
-                                 let altSymbol = yahooSymbol.replace(/\.TW$/, '.TWO');
-                                 performFetch(altSymbol).then(data => processData(data)).catch(e => { if(isForm)form.loading=false;else targetAsset.loading=false; });
-                            } else {
-                                if(isForm)form.loading=false;else targetAsset.loading=false;
-                            }
-                        });
-                };
-
-                if (currentType === 'Crypto' && cryptoIdMap[(isForm ? form.ticker : targetAsset.ticker).toUpperCase()]) {
-                    // Handled by CoinGecko block
-                } else {
-                    fetchYahooCrypto();
-                }
-            };
-            const fetchPriceForForm = () => fetchPriceDirect(null, true);
-            
-            const renderCharts = () => { 
-                nextTick(() => { 
-                    const ctx1 = document.getElementById('mainPieChart'); 
-                    if(ctx1) { 
-                        if(mainPieChart) mainPieChart.destroy(); 
-                        const data = {}; 
-                        assets.value.filter(a => a.includeInTotal !== false).forEach(a => { let k = assetTypesMap[a.type]; if(!data[k])data[k]=0; data[k]+=calculateMarketValue(a); }); 
-                        const totalVal = Object.values(data).reduce((a,b)=>a+b,0);
-                        mainPieChart = new Chart(ctx1, { 
-                            type: 'doughnut', 
-                            data: { labels: Object.keys(data), datasets:[{ data: Object.values(data), backgroundColor:['#FCA5A5','#FDBA74','#FDE047','#86EFAC','#93C5FD', '#C7D2FE', '#fdba74']}] }, 
-                            options: { responsive: true, maintainAspectRatio: false, layout: { padding: 20 }, plugins: { legend: { position:'right' } } },
-                            plugins: [{ id: 'customPieLabels', afterDraw(chart) { const { ctx, width, height } = chart; ctx.save(); ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#374151'; const meta = chart.getDatasetMeta(0); meta.data.forEach((arc, i) => { const value = chart.data.datasets[0].data[i]; if(value > 0) { const center = arc.getCenterPoint(); const percentage = ((value/totalVal)*100).toFixed(1) + '%'; if((value/totalVal) > 0.03) { ctx.fillText(chart.data.labels[i], center.x, center.y - 10); let valStr = '$' + Math.floor(value/10000).toLocaleString() + '萬'; if(value < 10000) valStr = '$' + Math.floor(value); ctx.fillText(valStr, center.x, center.y + 2); ctx.fillText(percentage, center.x, center.y + 14); } } }); ctx.restore(); } }] 
-                        }); 
-                    } 
                     const ctx2 = document.getElementById('monthlyBarChart'); 
                     if(ctx2) { 
                         if(monthlyBarChart) monthlyBarChart.destroy(); 
-                        monthlyBarChart = new Chart(ctx2, { type:'bar', data: { labels:Array.from({length:12},(_,i)=>i+1+'月'), datasets:[{label:'現金流', data:monthlyIncomeData.value, backgroundColor:monthlyIncomeData.value.map(v=>v>0?'#F472B6':'#f3f4f6'), borderRadius:4}] }, 
-                        plugins:[{ id: 'barLabel', afterDatasetsDraw(chart) { const { ctx } = chart; chart.data.datasets.forEach((dataset, i) => { const meta = chart.getDatasetMeta(i); meta.data.forEach((element, index) => { const value = dataset.data[index]; if (value > 0) { ctx.save(); ctx.fillStyle = '#6b7280'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(Math.floor(value).toLocaleString(), element.x, element.y - 5); ctx.restore(); } }); }); } }], options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true},x:{grid:{display:false}}}} }); 
-                    } 
-                    
+                        monthlyBarChart = new Chart(ctx2, { type:'bar', data: { labels:Array.from({length:12},(_,i)=>i+1+'月'), datasets:[{label:'現金流', data:monthlyIncomeData.value, backgroundColor:monthlyIncomeData.value.map(v=>v>0?'#F472B6':'#f3f4f6'), borderRadius:4}] }, options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true},x:{grid:{display:false}}}} }); 
+                    }
                     if(currentTab.value === 'history') renderHistoryChart();
-                }); 
-            };
-            
-            onMounted(() => { loadData(); renderCharts(); });
+                });
+             };
+
+            onMounted(() => { initFirebase(); loadData(); renderCharts(); });
             watch([currentTab, assets, settings], () => { saveData(); renderCharts(); }, {deep:true});
 
-            return { currentTab, showModal, isEditing, form, settings, assets, assetTypesMap, bankList, netWorth, annualPassiveIncome, totalProfitLoss, monthlyIncomeData, passiveIncomeList, switchType, openModal, saveAsset, removeAsset, toggleDividendMonth, formatNumber, formatUnit, getBankColor, getTypeColor, getChineseType, getFreqLabel, tabClass, getProfitClass, calculateCost, calculateMarketValue, calculateProfitAmount, calculateProfitPercent, fetchPriceForForm, fetchPriceDirect, resetData, calculatedTotalDividend, calculatedYield, resetDividendDetails, sumDividend, forceMigrateData, isUSD, updateAllAssets, isUpdatingAll, fetchGlobalUSDRate, historyData, recordCurrentHistory, deleteHistory, showHistoryModal, historyForm, openHistoryModal, saveHistoryRecord, handleFileUpload, triggerImport, exportData, exportCSV };
+            return { 
+                currentTab, showModal, isEditing, form, settings, assets, assetTypesMap, bankList, 
+                netWorth, annualPassiveIncome, totalProfitLoss, monthlyIncomeData, passiveIncomeList, 
+                switchType, openModal, saveAsset, removeAsset, toggleDividendMonth, 
+                formatNumber, formatUnit, getBankColor, getTypeColor, getChineseType, getFreqLabel, 
+                tabClass, getProfitClass, calculateCost, calculateMarketValue, calculateProfitAmount, calculateProfitPercent, 
+                fetchPriceForForm: fetchPriceForFormLocal, fetchPriceDirect, resetData, 
+                calculatedTotalDividend, calculatedYield, resetDividendDetails, sumDividend, 
+                forceMigrateData, isUSD, updateAllAssets, isUpdatingAll, fetchGlobalUSDRate, 
+                historyData, recordCurrentHistory, deleteHistory, showHistoryModal, historyForm, openHistoryModal, saveHistoryRecord, 
+                handleFileUpload: handleFileUploadModule, triggerImport, exportData, exportCSV,
+                user, isSyncing, cloudMessage, saveToCloud, loadFromCloud,
+                firebaseConfigInput, connectCustomCloud, disconnectCloud
+            };
         }
     }).mount('#app');
 </script>
